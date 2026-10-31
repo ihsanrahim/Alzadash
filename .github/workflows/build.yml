@@ -45,6 +45,23 @@ jobs:
             echo "::warning::No signing secrets set; building with the debug key."
           fi
 
+      # Prints only sizes and short fingerprints, never the secrets, to help spot a bad paste.
+      - name: Check signing key
+        if: env.SIGNING_KEYSTORE != ''
+        env:
+          STORE_PW: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_PW: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+        run: |
+          echo "keystore bytes: $(stat -c %s "$SIGNING_KEYSTORE")  sha: $(sha256sum "$SIGNING_KEYSTORE" | cut -c1-12)"
+          echo "store password length: ${#STORE_PW}  key password length: ${#KEY_PW}  alias length: ${#ALIAS}"
+          echo "passwords equal: $([ "$STORE_PW" = "$KEY_PW" ] && echo yes || echo no)"
+          if keytool -list -keystore "$SIGNING_KEYSTORE" -storetype PKCS12 -storepass "$STORE_PW" >/dev/null 2>&1; then
+            echo "store password opens the keystore: yes"
+          else
+            echo "::error::Store password does not open the keystore"
+          fi
+
       - name: Build
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
