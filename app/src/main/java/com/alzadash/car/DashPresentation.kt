@@ -141,7 +141,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
             block.visibility = View.GONE
         } else {
             block.text = if (TripTracker.speedKmh() == null && !forcedBlock) {
-                "Waiting for GPS to confirm the car is stopped.\n\nThe page appears once you're parked."
+                TripTracker.problem(context) + "\n\nThe page appears once the car is confirmed stopped."
             } else {
                 "The browser is hidden while driving.\n\nSound keeps playing. The page comes back when you stop."
             }

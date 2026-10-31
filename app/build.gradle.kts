@@ -11,8 +11,8 @@ android {
         applicationId = "com.alzadash"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        versionName = "4.6"
+        versionCode = 11
+        versionName = "4.7"
     }
 
     // Release signing comes from GitHub Actions secrets (see README). Without them the

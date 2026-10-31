@@ -62,11 +62,29 @@ object TripTracker {
             PackageManager.PERMISSION_GRANTED
         if (!granted) return
         val lm = context.applicationContext.getSystemService(LocationManager::class.java)
-        try {
-            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, listener, Looper.getMainLooper())
-            manager = lm
-        } catch (_: Exception) {
+        // GPS first; the fused provider (GPS + Wi-Fi + phone sensors) helps under roofs and in car parks.
+        val providers = mutableListOf(LocationManager.GPS_PROVIDER)
+        if (android.os.Build.VERSION.SDK_INT >= 31) providers += LocationManager.FUSED_PROVIDER
+        for (p in providers) {
+            try {
+                lm.requestLocationUpdates(p, 1000L, 0f, listener, Looper.getMainLooper())
+                manager = lm
+            } catch (_: Exception) {
+            }
         }
+    }
+
+    /** Why there is no speed reading, in words for the car screen. */
+    fun problem(context: Context): String {
+        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!fine) return "AlzaDash isn't allowed to use location. Open AlzaDash on your phone and tap Location."
+        val lm = context.getSystemService(LocationManager::class.java)
+        if (lm != null && android.os.Build.VERSION.SDK_INT >= 28 && !lm.isLocationEnabled) return "Location is turned off on your phone."
+        if (android.os.Build.VERSION.SDK_INT >= 29 && ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)
+            return "Location stops when the phone screen is off. In the AlzaDash phone app, tap Location and pick Allow all the time."
+        return "Waiting for a GPS or car speed reading. A roof or car park can block GPS."
     }
 
     fun stop() {
@@ -77,6 +95,11 @@ object TripTracker {
 
     private fun onLocation(loc: Location) {
         val prev = last
+        // A fused fix without its own speed is too rough to prove the car is stopped; skip it.
+        if (!loc.hasSpeed() && loc.provider != LocationManager.GPS_PROVIDER) {
+            last = loc
+            return
+        }
         val mps = when {
             loc.hasSpeed() -> loc.speed
             prev != null && loc.time > prev.time -> prev.distanceTo(loc) / ((loc.time - prev.time) / 1000f)

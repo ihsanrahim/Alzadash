@@ -227,6 +227,14 @@ class MainActivity : AppCompatActivity() {
             problems += if (Shell.running()) "Shizuku isn't allowed yet." else "Shizuku isn't running (needed for apps on the car screen)."
             fixRow.addView(smallButton("Allow Shizuku", accent) { allowShizuku() }, weight())
         }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            problems += "Location isn't allowed, so the car screen can't tell when you're parked."
+            fixRow.addView(smallButton("Location", accent) { requestPermissions() }, weight())
+        } else if (Build.VERSION.SDK_INT >= 29 &&
+            checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            problems += "Location: choose \"Allow all the time\" so parked video works with the phone screen off."
+            fixRow.addView(smallButton("Location", accent) { askAlwaysLocation() }, weight())
+        }
         if (!NowPlaying.hasAccess(this)) {
             problems += "Song names and lyrics need notification access."
             fixRow.addView(smallButton("Song access", accent) { openNowPlayingAccess() }, weight())
@@ -279,10 +287,17 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.RECORD_AUDIO,
+            "com.google.android.gms.permission.CAR_SPEED",
         )
         if (Build.VERSION.SDK_INT >= 31) perms += Manifest.permission.BLUETOOTH_CONNECT
         if (Build.VERSION.SDK_INT >= 33) perms += Manifest.permission.POST_NOTIFICATIONS
         askPermissions.launch(perms.toTypedArray())
+    }
+
+    /** Android only offers "Allow all the time" on the app's settings page. */
+    private fun askAlwaysLocation() {
+        toast("Tap Location, then Allow all the time")
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
     }
 
     private fun openNowPlayingAccess() {

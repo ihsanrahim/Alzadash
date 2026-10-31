@@ -1,6 +1,7 @@
 package com.alzadash.car
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.car.app.versioning.CarAppApiLevels
 import androidx.car.app.Screen
 import androidx.car.app.Session
@@ -18,6 +19,7 @@ import com.alzadash.core.TripTracker
 class DashSession : Session() {
     private var surface: CarSurface? = null
     private var speedListener: OnCarDataAvailableListener<Speed>? = null
+    private var askedSpeed = false
 
     override fun onCreateScreen(intent: Intent): Screen {
         val s = CarSurface(carContext)
@@ -39,6 +41,17 @@ class DashSession : Session() {
 
     /** Uses the car's own speed sensor when Android Auto shares it; GPS is the fallback. */
     private fun attachCarSpeed() {
+        val perm = "com.google.android.gms.permission.CAR_SPEED"
+        if (ContextCompat.checkSelfPermission(carContext, perm) != PackageManager.PERMISSION_GRANTED && !askedSpeed) {
+            askedSpeed = true
+            // Shows Android's "allow car speed" question on the phone; listens once it's allowed.
+            try {
+                carContext.requestPermissions(listOf(perm)) { granted, _ ->
+                    if (perm in granted) { detachCarSpeed(); attachCarSpeed() }
+                }
+            } catch (_: Exception) {
+            }
+        }
         try {
             if (carContext.carAppApiLevel < CarAppApiLevels.LEVEL_3) return
             val info = carContext.getCarService(CarHardwareManager::class.java).carInfo

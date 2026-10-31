@@ -61,13 +61,26 @@ class CoverActivity : Activity() {
                 post(tick)
             })
         } else {
-            setContentView(TextView(this).apply {
+            val label = TextView(this).apply {
                 setBackgroundColor(DashboardView.BG)
                 setTextColor(Color.WHITE)
-                textSize = 26f
+                textSize = 24f
                 gravity = Gravity.CENTER
-                text = "Video is hidden while driving.\n\nSound keeps playing. The picture comes back when you stop."
-            })
+                setPadding(48, 0, 48, 0)
+            }
+            setContentView(label)
+            // Say why the picture is hidden: driving, or no speed reading yet (and what to fix).
+            val update = object : Runnable {
+                override fun run() {
+                    label.text = if (TripTracker.speedKmh() == null) {
+                        TripTracker.problem(this@CoverActivity) + "\n\nVideo shows once the car is confirmed stopped. Sound keeps playing."
+                    } else {
+                        "Video is hidden while driving.\n\nSound keeps playing. The picture comes back when you stop."
+                    }
+                    label.postDelayed(this, 1000)
+                }
+            }
+            label.post(update)
         }
     }
 
