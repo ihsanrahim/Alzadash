@@ -1,7 +1,7 @@
 package com.alzadash.car
 
 import android.content.Intent
-import androidx.car.app.CarAppApiLevels
+import androidx.car.app.versioning.CarAppApiLevels
 import androidx.car.app.Screen
 import androidx.car.app.Session
 import androidx.car.app.hardware.CarHardwareManager
