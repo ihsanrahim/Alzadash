@@ -10,9 +10,12 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import com.alzadash.car.CarSurface
+import com.alzadash.core.Background
 import com.alzadash.core.Chime
 import com.alzadash.core.Launch
 import com.alzadash.core.NowPlaying
@@ -69,6 +72,32 @@ class MainActivity : AppCompatActivity() {
         col.addView(buttonRow(
             bigButton("Radio stations") { startActivity(Intent(this, StationsActivity::class.java)) },
             bigButton("Test welcome sound") { Chime.play() },
+        ))
+
+        col.addView(heading("CAR SCREEN"))
+        col.addView(buttonRow(
+            bigButton("Car shortcuts") { startActivity(Intent(this, DockPickerActivity::class.java)) },
+            bigButton("Background") { chooseBackground() },
+        ))
+        // Typing into an app open on the car screen. Tapping a text box there also brings up this phone's keyboard.
+        val typeBox = EditText(this).apply {
+            hint = "Type here to send to the car screen"
+            isSingleLine = true
+        }
+        col.addView(typeBox)
+        col.addView(buttonRow(
+            bigButton("Send text", accent) {
+                val surface = CarSurface.active?.get()
+                if (surface == null || surface.displayId < 0) {
+                    toast("Connect to the car first")
+                } else if (!Shell.available()) {
+                    toast("Shizuku is needed for this")
+                } else {
+                    surface.typeText(typeBox.text.toString())
+                    typeBox.setText("")
+                }
+            },
+            bigButton("Enter") { CarSurface.active?.get()?.let { Shell.key(it.displayId, 66) } },
         ))
 
         col.addView(heading("SETUP"))
@@ -138,6 +167,29 @@ class MainActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
+    }
+
+    private val pickBackground = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) toast(if (Background.fromUri(this, uri)) "Background set" else "Couldn't use that picture")
+    }
+
+    /** Uses the phone's wallpaper if Android allows it, otherwise lets you pick a picture. */
+    private fun chooseBackground() {
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Dashboard background")
+            .setItems(arrayOf("Use my phone wallpaper", "Pick a picture", "Plain dark")) { _, which ->
+                when (which) {
+                    0 -> if (Background.fromWallpaper(this)) {
+                        toast("Background set")
+                    } else {
+                        toast("Android doesn't let apps read the wallpaper. Pick the same picture from your gallery instead.")
+                        pickBackground.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                    1 -> pickBackground.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    else -> { Background.clear(this); toast("Background removed") }
+                }
+            }
+            .show()
     }
 
     private fun requestPermissions() {

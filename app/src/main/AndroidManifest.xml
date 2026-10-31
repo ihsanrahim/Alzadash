@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Android Auto: navigation apps may draw their own screen. -->
     <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
@@ -71,6 +72,7 @@
             android:taskAffinity="com.alzadash.cover"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
         <activity android:name=".phone.StationsActivity" android:label="@string/stations" />
+        <activity android:name=".phone.DockPickerActivity" android:label="Car shortcuts" />
 
         <service
             android:name=".car.DashCarAppService"
@@ -81,12 +83,15 @@
             </intent-filter>
         </service>
 
+        <!-- Also an Android Auto media app, so the radio can sit next to Waze and use the steering buttons. -->
         <service
             android:name=".core.PlaybackService"
             android:exported="true"
+            android:label="AlzaDash Radio"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
-                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
 

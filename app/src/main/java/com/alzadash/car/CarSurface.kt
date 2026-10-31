@@ -5,6 +5,7 @@ import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
@@ -25,6 +26,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     var mode = Mode.DASH
         private set
     var onDock: (DockApp) -> Unit = {}
+    var onRadioStep: (Int) -> Unit = {}
     private var display: VirtualDisplay? = null
     private var presentation: DashPresentation? = null
     private var visible = Rect()
@@ -34,6 +36,15 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     private var coverOnTop = false
     private var blocking = false
     private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * Apps on the car screen pause when the phone goes to sleep, so the phone is kept awake
+     * (screen dimmed) while one is open.
+     */
+    @Suppress("DEPRECATION")
+    private val wake = carContext.getSystemService(PowerManager::class.java)
+        .newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "AlzaDash:carApp")
+        .apply { setReferenceCounted(false) }
 
     private val gate = object : Runnable {
         override fun run() {
@@ -64,6 +75,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             it.show()
             it.setVisibleArea(visible)
             it.onDock = { app -> onDock(app) }
+            it.onRadioStep = { d -> onRadioStep(d) }
             it.setMode(if (mode == Mode.APP) Mode.DASH else mode)
         }
         if (mode == Mode.APP) mode = Mode.DASH
@@ -98,6 +110,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         if (m == Mode.APP) return
         val fromApp = mode == Mode.APP || coverOnTop
         mode = m
+        if (wake.isHeld) wake.release()
         blocking = false
         if (fromApp) {
             // An app is still open underneath; put our dashboard on top of it.
@@ -126,6 +139,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         blocking = false
         CoverActivity.finishAll()
         presentation?.hide()
+        wake.acquire(4 * 60 * 60_000L)
         Shell.startOnDisplay(id, component)
         checkGate()
     }
@@ -135,6 +149,11 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     fun playPause() = Shell.key(displayId, 85)
+
+    /** Types into whatever field is selected in the app on the car screen. */
+    fun typeText(words: String) {
+        if (displayId >= 0) Shell.typeText(displayId, words)
+    }
 
     /** Covers an app with our own screen while moving, and uncovers it once parked again. */
     private fun checkGate() {
@@ -167,6 +186,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
 
     fun release(keepGate: Boolean = false) {
         if (!keepGate) handler.removeCallbacks(gate)
+        if (wake.isHeld) wake.release()
         CoverActivity.finishAll()
         coverOnTop = false
         blocking = false

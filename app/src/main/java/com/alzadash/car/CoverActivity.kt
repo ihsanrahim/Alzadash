@@ -18,6 +18,7 @@ class CoverActivity : Activity() {
         if (intent.getStringExtra("kind") == HOME) {
             setContentView(DashboardView(this).apply {
                 onDockTap = { app -> CarSurface.active?.get()?.onDock?.invoke(app) }
+                onRadioStep = { d -> CarSurface.active?.get()?.onRadioStep?.invoke(d) }
                 val tick = object : Runnable {
                     override fun run() {
                         invalidate()

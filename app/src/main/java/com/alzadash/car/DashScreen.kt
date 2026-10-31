@@ -25,6 +25,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
 
     init {
         surface.onDock = { app -> openDock(app) }
+        surface.onRadioStep = { delta -> Radio.step(carContext, delta) { say(it) } }
     }
 
     override fun onGetTemplate(): Template {
@@ -48,7 +49,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
                 strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
                 strip.addAction(icon(R.drawable.ic_back) { surface.goBack() })
                 strip.addAction(icon(R.drawable.ic_playpause) { surface.playPause() })
-                strip.addAction(icon(R.drawable.ic_radio) { screenManager.push(RadioScreen(carContext)) })
+                strip.addAction(icon(R.drawable.ic_keyboard) { dictate() })
             }
         }
         return NavigationTemplate.Builder().setActionStrip(strip.build()).build()
@@ -60,27 +61,31 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             .setOnClickListener { onClick() }
             .build()
 
-    /** A shortcut in the right-hand bar was tapped. */
+    /** A shortcut in the right-hand bar was tapped: open that app on the car screen. */
     fun openDock(app: DockApp) {
-        val pkg = Dock.installed(carContext, app)
-        if (!app.isVideo) {
-            navigate("", pkg ?: app.packages.first())
-            return
-        }
-        val launch = pkg?.let { carContext.packageManager.getLaunchIntentForPackage(it)?.component }
-        if (launch != null && Shell.available()) {
-            surface.openApp(launch.flattenToString())
-            if (app.label != "YouTube") say("${app.label} may show a black picture here because of its copy protection. Sound still works.")
-            else if (!TripTracker.isParked()) say("Video plays only while parked")
-        } else {
-            app.webUrl?.let { surface.openUrl(it) }
-            when {
-                launch == null -> say("${app.label} isn't installed, opening the website")
-                !Shell.running() -> say("Start Shizuku on your phone to open the real ${app.label} app")
-                else -> say("Allow Shizuku in the AlzaDash phone app to open the real ${app.label} app")
+        val launch = carContext.packageManager.getLaunchIntentForPackage(app.pkg)?.component
+        when {
+            launch == null -> say("${app.label} isn't installed")
+            Shell.available() -> {
+                surface.openApp(launch.flattenToString())
+                if (!TripTracker.isParked()) say("${app.label} shows once you're parked. Sound keeps playing.")
             }
+            app.label.lowercase().startsWith("youtube") && !app.label.lowercase().contains("music") -> {
+                surface.openUrl(DashPresentation.YOUTUBE)
+                say("Start Shizuku on your phone to open the real ${app.label} app")
+            }
+            !Shell.running() -> say("Start Shizuku on your phone to open ${app.label} here")
+            else -> say("Tap Allow Shizuku in the AlzaDash phone app to open ${app.label} here")
         }
         invalidate()
+    }
+
+    /** Voice typing into the app on the car screen. The phone's own keyboard also works. */
+    private fun dictate() {
+        VoiceCommands.dictate(carContext, { words ->
+            surface.typeText(words)
+            say("Typed: $words")
+        }, { say(it) })
     }
 
     override fun playRadio(station: Station) {
@@ -111,7 +116,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
 
     override fun showVideo(on: Boolean) {
         if (on) {
-            openDock(Dock.apps.first())
+            Dock.load(carContext).firstOrNull()?.let { openDock(it) } ?: say("Pick shortcut apps in the AlzaDash phone app")
         } else {
             surface.setMode(Mode.DASH)
             invalidate()

@@ -2,6 +2,7 @@ package com.alzadash.core
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -17,6 +18,7 @@ object Radio {
     @Volatile
     var current: Station? = null
         private set
+
 
     private fun withController(context: Context, block: (MediaController) -> Unit) {
         val app = context.applicationContext
@@ -50,10 +52,32 @@ object Radio {
         }
     }
 
+    /** Plays the station [delta] places after the current one (wrapping round). Used by ◀ ▶ and the steering wheel. */
+    fun step(context: Context, delta: Int, onError: (String) -> Unit = {}) {
+        val stations = Prefs(context).stations
+        if (stations.isEmpty()) return
+        val cur = current ?: Prefs(context).lastStation
+        val idx = stations.indexOfFirst { it.name == cur?.name }
+        val next = if (idx < 0) {
+            if (delta > 0) stations.first() else stations.last()
+        } else {
+            stations[(idx + delta).mod(stations.size)]
+        }
+        play(context, next, onError)
+    }
+
+    /** Records a station started from Android Auto's own radio screen. */
+    fun markCurrent(context: Context, station: Station) {
+        current = station
+        Prefs(context).lastStationName = station.name
+    }
+
     private fun start(context: Context, station: Station, url: String) {
         withController(context) { c ->
             val item = MediaItem.Builder()
+                .setMediaId(station.name)
                 .setUri(url)
+                .setRequestMetadata(MediaItem.RequestMetadata.Builder().setMediaUri(Uri.parse(url)).build())
                 .setMediaMetadata(
                     MediaMetadata.Builder().setTitle(station.name).setStation(station.name).build()
                 )

@@ -63,6 +63,11 @@ class Prefs(context: Context) {
         get() = sp.getFloat("lng", 101.687f).toDouble()
         set(value) = sp.edit().putFloat("lng", value.toFloat()).apply()
 
+    /** Packages shown in the car screen's shortcut bar, or null to use the defaults. */
+    var dockPackages: List<String>?
+        get() = sp.getString("dock_packages", null)?.split(",")?.filter { it.isNotBlank() }
+        set(value) = sp.edit().putString("dock_packages", value?.joinToString(",")).apply()
+
     var askedPermissions: Boolean
         get() = sp.getBoolean("asked_permissions", false)
         set(value) = sp.edit().putBoolean("asked_permissions", value).apply()

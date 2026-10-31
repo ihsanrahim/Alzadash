@@ -67,6 +67,44 @@ object VoiceCommands {
         sr.startListening(intent)
     }
 
+    /** Listens once and hands back the words as text, for typing into apps on the car screen. */
+    fun dictate(context: Context, onText: (String) -> Unit, fail: (String) -> Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            fail("Allow the microphone in the AlzaDash app on your phone first")
+            return
+        }
+        recognizer?.destroy()
+        val sr = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
+        recognizer = sr
+        sr.setRecognitionListener(object : RecognitionListener {
+            override fun onResults(results: Bundle) {
+                val heard = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+                if (heard.isEmpty()) fail("Didn't catch that") else onText(heard.first())
+                done()
+            }
+            override fun onError(error: Int) {
+                fail("Didn't catch that")
+                done()
+            }
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+            private fun done() {
+                sr.destroy()
+                if (recognizer === sr) recognizer = null
+            }
+        })
+        fail("Say what to type…")
+        sr.startListening(
+            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        )
+    }
+
     /** Matches what was heard against the known commands. Public so it can be unit tested. */
     fun handle(context: Context, heard: List<String>, target: CommandTarget) {
         val stations = Prefs(context).stations

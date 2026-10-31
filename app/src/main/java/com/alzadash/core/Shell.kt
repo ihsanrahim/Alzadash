@@ -47,6 +47,12 @@ object Shell {
     fun swipe(display: Int, x1: Float, y1: Float, x2: Float, y2: Float) =
         run("input", "-d", "$display", "swipe", "${x1.toInt()}", "${y1.toInt()}", "${x2.toInt()}", "${y2.toInt()}", "250")
 
+    /** `input text` needs spaces written as %s and shell characters escaped. */
+    fun typeText(display: Int, words: String) {
+        val safe = words.replace(Regex("[^\\p{L}\\p{N} .,?!@'-]"), "").replace("'", "").replace(" ", "%s")
+        if (safe.isNotEmpty()) run("input", "-d", "$display", "text", safe)
+    }
+
     fun key(display: Int, code: Int) = run("input", "-d", "$display", "keyevent", "$code")
 
     /** Opens an activity in a new task on the given display. */

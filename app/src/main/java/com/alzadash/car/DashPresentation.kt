@@ -38,6 +38,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     private var lastUrl = YOUTUBE
     private var forcedBlock = false
     var onDock: (DockApp) -> Unit = {}
+    var onRadioStep: (Int) -> Unit = {}
     private val handler = Handler(Looper.getMainLooper())
 
     private val tick = object : Runnable {
@@ -52,7 +53,10 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
         super.onCreate(savedInstanceState)
         val ctx = getContext()
         root = FrameLayout(ctx).apply { setBackgroundColor(DashboardView.BG) }
-        dash = DashboardView(ctx).apply { onDockTap = { app -> onDock(app) } }
+        dash = DashboardView(ctx).apply {
+            onDockTap = { app -> onDock(app) }
+            onRadioStep = { d -> this@DashPresentation.onRadioStep(d) }
+        }
         videoLayer = FrameLayout(ctx).apply { visibility = View.GONE }
         block = TextView(ctx).apply {
             setBackgroundColor(DashboardView.BG)
