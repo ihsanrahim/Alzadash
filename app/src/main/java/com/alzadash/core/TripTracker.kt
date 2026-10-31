@@ -38,6 +38,15 @@ object TripTracker {
         private set
 
     private var manager: LocationManager? = null
+    private var prefs: Prefs? = null
+    private var savedAt = 0L
+
+    /** Where the car is, or the last place it was seen (Kuala Lumpur until the first fix). */
+    fun position(context: Context): Pair<Double, Double> {
+        last?.let { return it.latitude to it.longitude }
+        val p = prefs ?: Prefs(context)
+        return p.lastLat to p.lastLng
+    }
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) = onLocation(location)
         override fun onProviderEnabled(provider: String) {}
@@ -48,6 +57,7 @@ object TripTracker {
 
     fun start(context: Context) {
         if (manager != null) return
+        prefs = Prefs(context)
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
         if (!granted) return
@@ -80,6 +90,12 @@ object TripTracker {
         }
         last = loc
         updateStill()
+        val now = SystemClock.elapsedRealtime()
+        if (now - savedAt > 5 * 60_000) {
+            savedAt = now
+            prefs?.lastLat = loc.latitude
+            prefs?.lastLng = loc.longitude
+        }
     }
 
     fun onCarSpeed(metersPerSecond: Float) {

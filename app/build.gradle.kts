@@ -11,8 +11,8 @@ android {
         applicationId = "com.alzadash"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     // Release signing comes from GitHub Actions secrets (see README). Without them the
@@ -55,4 +55,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

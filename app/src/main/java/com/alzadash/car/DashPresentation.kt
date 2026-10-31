@@ -36,6 +36,8 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     private var mode = Mode.DASH
     private var visible = Rect()
     private var lastUrl = YOUTUBE
+    private var forcedBlock = false
+    var onDock: (DockApp) -> Unit = {}
     private val handler = Handler(Looper.getMainLooper())
 
     private val tick = object : Runnable {
@@ -50,7 +52,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
         super.onCreate(savedInstanceState)
         val ctx = getContext()
         root = FrameLayout(ctx).apply { setBackgroundColor(DashboardView.BG) }
-        dash = DashboardView(ctx)
+        dash = DashboardView(ctx).apply { onDockTap = { app -> onDock(app) } }
         videoLayer = FrameLayout(ctx).apply { visibility = View.GONE }
         block = TextView(ctx).apply {
             setBackgroundColor(DashboardView.BG)
@@ -91,7 +93,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     fun setMode(m: Mode) {
         mode = m
         if (!::root.isInitialized) return
-        if (m == Mode.VIDEO) {
+        if (m == Mode.WEB) {
             ensureWeb()
             videoLayer.visibility = View.VISIBLE
             dash.visibility = View.GONE
@@ -110,7 +112,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
 
     fun openUrl(url: String) {
         lastUrl = url
-        if (mode != Mode.VIDEO) setMode(Mode.VIDEO)
+        if (mode != Mode.WEB) setMode(Mode.WEB)
         web?.loadUrl(url)
     }
 
@@ -142,16 +144,22 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
         w.loadUrl(lastUrl)
     }
 
+    /** Covers everything, used while a real app is open on the car screen and the car is moving. */
+    fun setBlocked(on: Boolean) {
+        forcedBlock = on
+        if (::root.isInitialized) updateVideoGate()
+    }
+
     /** The safety gate: video shows only when the car is confirmed stopped. */
     private fun updateVideoGate() {
-        if (mode != Mode.VIDEO) {
+        if (mode != Mode.WEB && !forcedBlock) {
             block.visibility = View.GONE
             return
         }
-        if (TripTracker.isParked()) {
+        if (TripTracker.isParked() && !forcedBlock) {
             block.visibility = View.GONE
         } else {
-            block.text = if (TripTracker.speedKmh() == null) {
+            block.text = if (TripTracker.speedKmh() == null && !forcedBlock) {
                 "Waiting for GPS to confirm the car is stopped.\n\nVideo appears once you're parked."
             } else {
                 "Video is hidden while driving.\n\nSound keeps playing. The picture comes back when you stop."
@@ -169,7 +177,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
 
     /** Turns a scroll on the car screen into a finger drag, so web pages scroll naturally. */
     fun drag(dx: Float, dy: Float) {
-        if (mode != Mode.VIDEO) return
+        if (mode != Mode.WEB) return
         val target = window?.decorView ?: return
         val cx = target.width / 2f
         val cy = target.height / 2f

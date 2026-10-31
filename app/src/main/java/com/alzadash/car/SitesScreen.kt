@@ -9,10 +9,15 @@ import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 
 /** Picks what the video browser opens. */
-class SitesScreen(carContext: CarContext, private val surface: CarSurface) : Screen(carContext) {
+class SitesScreen(
+    carContext: CarContext,
+    private val surface: CarSurface,
+    private val after: () -> Unit = {},
+) : Screen(carContext) {
     private val sites = listOf(
         "YouTube" to DashPresentation.YOUTUBE,
         "Netflix" to DashPresentation.NETFLIX,
+        "Disney+ Hotstar" to "https://www.hotstar.com/my",
         "Google" to "https://www.google.com",
     )
 
@@ -22,12 +27,13 @@ class SitesScreen(carContext: CarContext, private val surface: CarSurface) : Scr
             val row = Row.Builder().setTitle(name).setOnClickListener {
                 surface.openUrl(url)
                 screenManager.pop()
+                after()
             }
-            if (name == "Netflix") row.addText("May not play in the car browser")
+            if (name != "YouTube" && name != "Google") row.addText("May not play in the car browser")
             list.addItem(row.build())
         }
         return ListTemplate.Builder()
-            .setTitle("Video sites (parked only)")
+            .setTitle("Websites (video plays when parked)")
             .setHeaderAction(Action.BACK)
             .setSingleList(list.build())
             .build()

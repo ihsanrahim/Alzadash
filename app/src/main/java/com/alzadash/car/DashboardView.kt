@@ -7,16 +7,25 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.text.format.DateFormat
+import android.view.MotionEvent
 import android.view.View
+import com.alzadash.core.Hijri
 import com.alzadash.core.NowPlaying
+import com.alzadash.core.Prayer
 import com.alzadash.core.Radio
 import com.alzadash.core.TripTracker
+import com.alzadash.core.Weather
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.min
 
-/** The dashboard face: clock, speed, trip and what's playing. Redrawn twice a second. */
+/**
+ * The dashboard face: time, dates, next prayer with countdown, weather, speed and trip,
+ * what's playing, and a vertical shortcut bar on the right. Redrawn twice a second.
+ */
 class DashboardView(context: Context) : View(context) {
     var visibleArea = Rect()
         set(value) {
@@ -24,75 +33,175 @@ class DashboardView(context: Context) : View(context) {
             invalidate()
         }
 
+    /** Called when a shortcut in the right-hand bar is tapped. */
+    var onDockTap: (DockApp) -> Unit = {}
+
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val dim = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = DIM }
     private val accent = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ACCENT }
+    private val warm = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = WARM }
     private val card = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = CARD }
+    private val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ACCENT }
     private val bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     private val light = Typeface.create("sans-serif-light", Typeface.NORMAL)
+
+    private val dockRects = mutableListOf<Pair<RectF, DockApp>>()
+    private val icons = HashMap<String, Drawable?>()
+    private var hijri = ""
+    private var hijriDay = -1
+
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (event.action == MotionEvent.ACTION_UP) {
+            dockRects.firstOrNull { it.first.contains(event.x, event.y) }?.let { onDockTap(it.second) }
+        }
+        return true
+    }
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawColor(BG)
         val a = if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea
-        val pad = a.height() * 0.05f
-        val left = a.left + pad
+        val u = min(a.height() / 10f, a.width() / 17f) // one layout unit
+        val pad = u * 0.5f
         val top = a.top + pad
-        val right = a.right - pad
         val bottom = a.bottom - pad
-        val u = min(a.height() / 10f, a.width() / 16f) // one layout unit
+        val dockW = u * 1.9f
+        val left = a.left + pad
+        val right = a.right - pad - dockW - pad
+        val (lat, lng) = TripTracker.position(context)
+        Weather.refreshIfStale(lat, lng)
 
-        // Clock and date, top left.
+        drawDock(canvas, a.right - pad - dockW, top, a.right - pad, bottom, u)
+
+        // Left column: time, dates, speed and trip.
         val now = Date()
-        val clock = DateFormat.getTimeFormat(context).format(now)
         text.typeface = light
-        text.textSize = u * 1.9f
-        canvas.drawText(clock, left, top + u * 1.7f, text)
+        text.textSize = u * 2.3f
+        canvas.drawText(DateFormat.getTimeFormat(context).format(now), left, top + u * 2.0f, text)
         dim.textSize = u * 0.55f
-        val date = DateFormat.format("EEEE, d MMMM", now).toString()
-        canvas.drawText(date, left, top + u * 2.5f, dim)
+        canvas.drawText(DateFormat.format("EEEE, d MMMM yyyy", now).toString(), left, top + u * 2.9f, dim)
+        val day = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        if (day != hijriDay) {
+            hijri = try { Hijri.today() } catch (_: Exception) { "" }
+            hijriDay = day
+        }
+        warm.textSize = u * 0.55f
+        canvas.drawText(hijri, left, top + u * 3.7f, warm)
 
-        // Speed, centre left.
         val speed = TripTracker.speedKmh()
         text.typeface = bold
-        text.textSize = u * 3.6f
+        text.textSize = u * 1.6f
         val speedText = speed?.let { String.format(Locale.US, "%.0f", it) } ?: "--"
-        val speedY = top + u * 6.4f
+        val speedY = top + u * 5.9f
         canvas.drawText(speedText, left, speedY, text)
-        accent.textSize = u * 0.6f
-        canvas.drawText("km/h", left + text.measureText(speedText) + u * 0.3f, speedY, accent)
+        accent.textSize = u * 0.5f
+        val sx = left + text.measureText(speedText) + u * 0.25f
+        canvas.drawText("km/h", sx, speedY, accent)
+        dim.textSize = u * 0.45f
+        val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
+            TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
+        canvas.drawText(trip, left, speedY + u * 0.8f, dim)
 
-        // Trip card, right.
-        val cardLeft = left + (right - left) * 0.55f
-        val tripRect = RectF(cardLeft, top, right, top + u * 6.0f)
-        canvas.drawRoundRect(tripRect, u * 0.4f, u * 0.4f, card)
-        val cx = cardLeft + u * 0.5f
-        drawStat(canvas, "TRIP", String.format(Locale.US, "%.1f km", TripTracker.tripMeters / 1000), cx, top + u * 1.4f, u)
-        drawStat(canvas, "TIME", duration(System.currentTimeMillis() - TripTracker.tripStartMs), cx, top + u * 3.2f, u)
-        drawStat(canvas, "AVG", String.format(Locale.US, "%.0f km/h", TripTracker.avgKmh()), cx, top + u * 5.0f, u)
+        // Right column: prayer card and weather card.
+        val colL = left + (right - left) * 0.5f
+        val prayerRect = RectF(colL, top, right, top + u * 4.0f)
+        canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
+        drawPrayer(canvas, prayerRect, lat, lng, u)
 
-        // Now playing, bottom.
-        val npTop = bottom - u * 2.0f
-        canvas.drawRoundRect(RectF(left, npTop, right, bottom), u * 0.4f, u * 0.4f, card)
+        val wRect = RectF(colL, prayerRect.bottom + u * 0.3f, right, prayerRect.bottom + u * 2.3f)
+        canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
+        drawWeather(canvas, wRect, u)
+
+        // Bottom: what's playing.
+        val npRect = RectF(left, bottom - u * 1.6f, right, bottom)
+        canvas.drawRoundRect(npRect, u * 0.4f, u * 0.4f, card)
         val station = Radio.current
         val track = NowPlaying.read(context)
         val (label, line) = when {
             track != null -> "NOW PLAYING" to listOf(track.title, track.artist).filter { it.isNotBlank() }.joinToString(" · ")
             station != null -> "RADIO" to station.name
-            else -> "INSTANT RADIO" to "Tap Radio to play a station"
+            else -> "INSTANT RADIO" to "Tap the radio button to pick a station"
         }
-        accent.textSize = u * 0.42f
-        canvas.drawText(label, left + u * 0.5f, npTop + u * 0.8f, accent)
+        accent.textSize = u * 0.38f
+        canvas.drawText(label, npRect.left + u * 0.5f, npRect.top + u * 0.6f, accent)
         text.typeface = Typeface.DEFAULT
-        text.textSize = u * 0.65f
-        canvas.drawText(ellipsize(line, text, right - left - u), left + u * 0.5f, npTop + u * 1.6f, text)
+        text.textSize = u * 0.6f
+        canvas.drawText(ellipsize(line, text, npRect.width() - u), npRect.left + u * 0.5f, npRect.top + u * 1.3f, text)
     }
 
-    private fun drawStat(canvas: Canvas, label: String, value: String, x: Float, y: Float, u: Float) {
-        dim.textSize = u * 0.42f
-        canvas.drawText(label, x, y - u * 0.75f, dim)
+    private fun drawPrayer(canvas: Canvas, r: RectF, lat: Double, lng: Double, u: Float) {
+        val now = System.currentTimeMillis()
+        val next = Prayer.next(lat, lng, now)
+        val fmt = DateFormat.getTimeFormat(context)
+        val x = r.left + u * 0.5f
+        accent.textSize = u * 0.38f
+        canvas.drawText("NEXT PRAYER", x, r.top + u * 0.7f, accent)
         text.typeface = bold
-        text.textSize = u * 0.85f
-        canvas.drawText(value, x, y + u * 0.2f, text)
+        text.textSize = u * 0.7f
+        canvas.drawText("${next.name}  ${fmt.format(Date(next.atMillis))}", x, r.top + u * 1.5f, text)
+        val left = (next.atMillis - now).coerceAtLeast(0) / 1000
+        text.typeface = light
+        text.textSize = u * 1.1f
+        canvas.drawText(String.format(Locale.US, "−%d:%02d:%02d", left / 3600, left / 60 % 60, left % 60), x, r.top + u * 2.6f, text)
+
+        // Today's timetable in two rows of three.
+        val times = Prayer.forDay(lat, lng, Calendar.getInstance())
+        val colW = (r.width() - u) / 3
+        times.forEachIndexed { i, p ->
+            val cx = x + (i % 3) * colW
+            val cy = r.top + u * 3.2f + (i / 3) * u * 0.55f
+            val paint = if (p.name == next.name) warm else dim
+            paint.textSize = u * 0.36f
+            canvas.drawText("${p.name} ${fmt.format(Date(p.atMillis))}", cx, cy, paint)
+        }
+    }
+
+    private fun drawWeather(canvas: Canvas, r: RectF, u: Float) {
+        val w = Weather.now
+        val x = r.left + u * 0.5f
+        if (w == null) {
+            dim.textSize = u * 0.45f
+            canvas.drawText("Weather loading…", x, r.centerY() + u * 0.15f, dim)
+            return
+        }
+        text.typeface = Typeface.DEFAULT
+        text.textSize = u * 1.0f
+        canvas.drawText(w.icon, x, r.top + u * 1.35f, text)
+        text.typeface = bold
+        text.textSize = u * 1.0f
+        val tx = x + u * 1.5f
+        val temp = String.format(Locale.US, "%.0f°", w.tempC)
+        canvas.drawText(temp, tx, r.top + u * 1.35f, text)
+        val lx = tx + text.measureText(temp) + u * 0.4f
+        text.typeface = Typeface.DEFAULT
+        text.textSize = u * 0.45f
+        canvas.drawText(w.label, lx, r.top + u * 0.95f, text)
+        dim.textSize = u * 0.38f
+        canvas.drawText(String.format(Locale.US, "H %.0f°  L %.0f°", w.highC, w.lowC), lx, r.top + u * 1.5f, dim)
+    }
+
+    private fun drawDock(canvas: Canvas, l: Float, t: Float, r: Float, b: Float, u: Float) {
+        canvas.drawRoundRect(RectF(l, t, r, b), u * 0.5f, u * 0.5f, card)
+        dockRects.clear()
+        val apps = Dock.apps
+        val slot = (b - t) / apps.size
+        val size = min((r - l) * 0.62f, slot * 0.62f)
+        apps.forEachIndexed { i, app ->
+            val cx = (l + r) / 2
+            val cy = t + slot * i + slot / 2
+            val rect = RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
+            dockRects += RectF(l, t + slot * i, r, t + slot * (i + 1)) to app
+            val icon = icons.getOrPut(app.label) { Dock.icon(context, app) }
+            if (icon != null) {
+                icon.setBounds(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
+                icon.draw(canvas)
+            } else {
+                canvas.drawOval(rect, bar)
+                text.typeface = bold
+                text.textSize = size * 0.45f
+                val letter = app.label.take(1)
+                canvas.drawText(letter, cx - text.measureText(letter) / 2, cy + size * 0.16f, text)
+            }
+        }
     }
 
     private fun duration(ms: Long): String {
@@ -111,6 +220,7 @@ class DashboardView(context: Context) : View(context) {
         val BG = Color.parseColor("#0E1116")
         val CARD = Color.parseColor("#1A1F27")
         val ACCENT = Color.parseColor("#4FD1C5")
+        val WARM = Color.parseColor("#F6AD55")
         val DIM = Color.parseColor("#8A94A6")
     }
 }

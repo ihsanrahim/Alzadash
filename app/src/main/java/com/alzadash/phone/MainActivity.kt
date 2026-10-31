@@ -18,10 +18,13 @@ import com.alzadash.core.Launch
 import com.alzadash.core.NowPlaying
 import com.alzadash.core.Pkg
 import com.alzadash.core.Prefs
+import com.alzadash.core.Shell
 
 /** The phone companion: quick launch buttons, tools and setup. */
 class MainActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
+    private lateinit var shizukuStatus: android.widget.TextView
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
     private val askPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         val missing = it.filterValues { granted -> !granted }.keys
@@ -48,6 +51,9 @@ class MainActivity : AppCompatActivity() {
         ))
         col.addView(buttonRow(
             bigButton("YouTube") { Launch.app(this, Pkg.YOUTUBE) },
+            bigButton("Disney+ Hotstar") { Launch.app(this, "in.startv.hotstar.dplus") },
+        ))
+        col.addView(buttonRow(
             bigButton("Gemini", accent) { Launch.gemini(this) },
         ))
         col.addView(buttonRow(
@@ -66,6 +72,14 @@ class MainActivity : AppCompatActivity() {
         ))
 
         col.addView(heading("SETUP"))
+        shizukuStatus = note("")
+        col.addView(shizukuStatus)
+        col.addView(buttonRow(
+            bigButton("Allow Shizuku", accent) {
+                if (!Shell.running()) toast("Open Shizuku and tap Start first") else Shell.requestPermission()
+                handler.postDelayed({ updateShizuku() }, 1500)
+            },
+        ))
         col.addView(buttonRow(
             bigButton("Allow permissions", accent) { requestPermissions() },
             bigButton("Show song on dash") { openNowPlayingAccess() },
@@ -80,10 +94,30 @@ class MainActivity : AppCompatActivity() {
         col.addView(note(
             "In Android Auto settings, tap Version 10 times to unlock developer settings, " +
                 "then turn on Unknown sources. AlzaDash then appears in the car's app list.\n\n" +
-                "Video on the car screen plays only while the car is stopped. While moving, the picture is hidden and only sound continues."
+                "Video on the car screen plays only while the car is stopped. While moving, the picture is hidden and only sound continues.\n\n" +
+                "To open YouTube, Netflix and Hotstar as real apps on the car screen, Shizuku must be running and allowed above."
         ))
 
         setContentView(ScrollView(this).apply { addView(col) })
+
+        // Ask for everything the car screen needs the first time the app is opened.
+        if (!prefs.askedPermissions) {
+            prefs.askedPermissions = true
+            requestPermissions()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateShizuku()
+    }
+
+    private fun updateShizuku() {
+        shizukuStatus.text = when {
+            Shell.available() -> "Shizuku: connected. YouTube, Netflix and Hotstar open as real apps on the car screen."
+            Shell.running() -> "Shizuku: running, but AlzaDash isn't allowed yet. Tap Allow Shizuku."
+            else -> "Shizuku: not running. Without it the car screen uses websites instead of the real video apps."
+        }
     }
 
     private fun toggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) = SwitchCompat(this).apply {

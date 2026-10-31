@@ -30,6 +30,12 @@
         <package android:name="com.google.android.apps.bard" />
         <package android:name="com.google.android.apps.maps" />
         <package android:name="com.waze" />
+        <package android:name="app.revanced.android.youtube" />
+        <package android:name="app.rvx.android.youtube" />
+        <package android:name="in.startv.hotstar.dplus" />
+        <package android:name="in.startv.hotstar" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
 
     <application
@@ -56,6 +62,14 @@
             </intent-filter>
         </activity>
         <activity android:name=".phone.AppsActivity" android:label="@string/all_apps" />
+        <!-- Shown on the car display on top of a real app (dashboard or "hidden while driving"). -->
+        <activity
+            android:name=".car.CoverActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="true"
+            android:taskAffinity="com.alzadash.cover"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
         <activity android:name=".phone.StationsActivity" android:label="@string/stations" />
 
         <service
@@ -97,5 +111,13 @@
         <receiver
             android:name=".phone.InstallReceiver"
             android:exported="false" />
+
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
 </manifest>

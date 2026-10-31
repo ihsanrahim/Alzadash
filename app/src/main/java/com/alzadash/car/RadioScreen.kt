@@ -25,7 +25,7 @@ class RadioScreen(carContext: CarContext) : Screen(carContext) {
                 Radio.play(carContext, st)
                 screenManager.pop()
             }
-            if (Radio.current?.url == st.url) row.addText("Playing")
+            if (Radio.current?.name == st.name) row.addText("Playing")
             list.addItem(row.build())
         }
         return ListTemplate.Builder()
