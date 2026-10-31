@@ -13,15 +13,21 @@ import android.text.format.DateFormat
 import android.view.MotionEvent
 import android.view.View
 import com.alzadash.core.Background
+import com.alzadash.core.Feature
+import com.alzadash.core.Features
 import com.alzadash.core.Hijri
 import com.alzadash.core.NowPlaying
 import com.alzadash.core.Prayer
+import com.alzadash.core.Prefs
 import com.alzadash.core.Radio
+import com.alzadash.core.Station
 import com.alzadash.core.TripTracker
 import com.alzadash.core.Weather
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.WeakHashMap
+import kotlin.math.abs
 import kotlin.math.min
 
 /**
@@ -58,18 +64,57 @@ class DashboardView(context: Context) : View(context) {
 
     /** Called when the ◀ or ▶ radio button is tapped, with -1 or +1. */
     var onRadioStep: (Int) -> Unit = {}
+    /** Called when a station in the radio row is tapped. */
+    var onStationTap: (Station) -> Unit = {}
+
+    /** Called when the ⚙ settings button is tapped. */
+    var onSettingsTap: () -> Unit = {}
+
     private var hijri = ""
     private var hijriDay = -1
+    private val rowRect = RectF()
+    private val chipRects = mutableListOf<Pair<RectF, Station>>()
+    private val settingsRect = RectF()
+    private var rowMax = 0f
+    private var downX = 0f
+    private var lastX = 0f
+    private var dragging = false
+    private var dragInRow = false
+
+    init {
+        live[this] = Unit
+    }
+
+    private fun on(f: Feature) = Features.on(context, f)
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.action == MotionEvent.ACTION_UP) {
-            when {
-                prevRect.contains(event.x, event.y) -> onRadioStep(-1)
-                nextRect.contains(event.x, event.y) -> onRadioStep(1)
-                else -> dockRects.firstOrNull { it.first.contains(event.x, event.y) }?.let { onDockTap(it.second) }
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                lastX = event.x
+                dragging = false
+                dragInRow = rowRect.contains(event.x, event.y)
             }
+            MotionEvent.ACTION_MOVE -> {
+                if (dragInRow && abs(event.x - downX) > width / 80f) dragging = true
+                if (dragging) {
+                    scrollRow(lastX - event.x)
+                    lastX = event.x
+                }
+            }
+            MotionEvent.ACTION_UP -> if (!dragging) tap(event.x, event.y)
         }
         return true
+    }
+
+    private fun tap(x: Float, y: Float) {
+        when {
+            settingsRect.contains(x, y) -> onSettingsTap()
+            prevRect.contains(x, y) -> onRadioStep(-1)
+            nextRect.contains(x, y) -> onRadioStep(1)
+            rowRect.contains(x, y) -> chipRects.firstOrNull { it.first.contains(x, y) }?.let { onStationTap(it.second) }
+            else -> dockRects.firstOrNull { it.first.contains(x, y) }?.let { onDockTap(it.second) }
+        }
     }
 
     /**
@@ -84,7 +129,12 @@ class DashboardView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawColor(BG)
-        Background.get(context)?.let { drawCover(canvas, it) }
+        if (on(Feature.BACKGROUND)) Background.get(context)?.let { drawCover(canvas, it) }
+        rowRect.setEmpty()
+        chipRects.clear()
+        settingsRect.setEmpty()
+        prevRect.setEmpty()
+        nextRect.setEmpty()
         val (lat, lng) = TripTracker.position(context)
         Weather.refreshIfStale(lat, lng)
         panel?.let {
@@ -107,23 +157,65 @@ class DashboardView(context: Context) : View(context) {
         // Left column: time, dates, speed and trip.
         drawClock(canvas, left, top, colL - left - u * 0.4f, u * 2.3f, u)
 
-        val speedY = top + u * 5.9f
-        drawSpeed(canvas, left, speedY, u * 1.6f, u)
-        dim.textSize = u * 0.45f
-        val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
-            TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
-        canvas.drawText(trip, left, speedY + u * 0.8f, dim)
+        if (on(Feature.SPEED)) {
+            val speedY = top + u * 5.25f
+            drawSpeed(canvas, left, speedY, u * 1.5f, u)
+            dim.textSize = u * 0.42f
+            val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
+                TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
+            canvas.drawText(trip, left, speedY + u * 0.7f, dim)
+        }
 
         // Right column: prayer card and weather card.
-        val prayerRect = RectF(colL, top, right, top + u * 2.0f)
-        canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
-        drawPrayer(canvas, prayerRect, lat, lng, u, 3)
+        var y = top
+        if (on(Feature.PRAYER)) {
+            val prayerRect = RectF(colL, y, right, y + u * 2.0f)
+            canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
+            drawPrayer(canvas, prayerRect, lat, lng, u, 3)
+            y = prayerRect.bottom + u * 0.3f
+        }
+        if (on(Feature.WEATHER)) {
+            val wRect = RectF(colL, y, right, y + u * 2.0f)
+            canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
+            drawWeather(canvas, wRect, u)
+        }
 
-        val wRect = RectF(colL, prayerRect.bottom + u * 0.3f, right, prayerRect.bottom + u * 2.3f)
-        canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
-        drawWeather(canvas, wRect, u)
+        // Bottom: station row, then what's playing.
+        if (on(Feature.RADIO_ROW)) drawRadioRow(canvas, RectF(left, top + u * 6.3f, right, top + u * 7.2f), u)
+        if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, bottom - u * 1.5f, right, bottom), u)
+    }
 
-        drawNowPlaying(canvas, RectF(left, bottom - u * 1.6f, right, bottom), u)
+    /** Radio stations side by side, seven at a time; drag sideways to see the rest. */
+    private fun drawRadioRow(canvas: Canvas, r: RectF, u: Float) {
+        val stations = Prefs(context).orderedStations
+        if (stations.isEmpty()) return
+        rowRect.set(r)
+        val gap = u * 0.2f
+        val chipW = (r.width() - gap * 6) / 7
+        rowMax = maxOf(0f, stations.size * (chipW + gap) - gap - r.width())
+        rowScroll = rowScroll.coerceIn(0f, rowMax)
+        canvas.save()
+        canvas.clipRect(r)
+        val current = Radio.current?.name
+        stations.forEachIndexed { i, st ->
+            val l = r.left + i * (chipW + gap) - rowScroll
+            if (l > r.right || l + chipW < r.left) return@forEachIndexed
+            val chip = RectF(l, r.top, l + chipW, r.bottom)
+            chipRects += chip to st
+            val playing = st.name == current
+            canvas.drawRoundRect(chip, r.height() / 2, r.height() / 2, if (playing) bar else card)
+            text.typeface = if (playing) bold else Typeface.DEFAULT
+            text.textSize = u * 0.36f
+            val name = ellipsize(st.name, text, chipW - u * 0.3f)
+            canvas.drawText(name, chip.centerX() - text.measureText(name) / 2, chip.centerY() + u * 0.13f, text)
+        }
+        canvas.restore()
+        // A thin bar shows how far along the row is scrolled.
+        if (rowMax > 0) {
+            val track = r.width() * r.width() / (r.width() + rowMax)
+            val x = r.left + (r.width() - track) * (rowScroll / rowMax)
+            canvas.drawRect(x, r.bottom + u * 0.08f, x + track, r.bottom + u * 0.14f, dim)
+        }
     }
 
     /** The narrow layout used beside the map: everything stacked in one column. */
@@ -135,16 +227,22 @@ class DashboardView(context: Context) : View(context) {
         var y = r.top + pad
         drawClock(canvas, left, y - u * 0.5f, right - left, u * 1.8f, u)
         y += u * 3.4f
-        drawSpeed(canvas, left, y + u * 0.9f, u * 1.1f, u)
-        y += u * 1.4f
-        val prayerRect = RectF(left, y, right, y + u * 2.5f)
-        canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
-        drawPrayer(canvas, prayerRect, lat, lng, u, 2)
-        y = prayerRect.bottom + u * 0.3f
-        val wRect = RectF(left, y, right, y + u * 2.0f)
-        canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
-        drawWeather(canvas, wRect, u)
-        drawNowPlaying(canvas, RectF(left, r.bottom - pad - u * 1.6f, right, r.bottom - pad), u)
+        if (on(Feature.SPEED)) {
+            drawSpeed(canvas, left, y + u * 0.9f, u * 1.1f, u)
+            y += u * 1.4f
+        }
+        if (on(Feature.PRAYER)) {
+            val prayerRect = RectF(left, y, right, y + u * 2.5f)
+            canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
+            drawPrayer(canvas, prayerRect, lat, lng, u, 2)
+            y = prayerRect.bottom + u * 0.3f
+        }
+        if (on(Feature.WEATHER)) {
+            val wRect = RectF(left, y, right, y + u * 2.0f)
+            canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
+            drawWeather(canvas, wRect, u)
+        }
+        if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, r.bottom - pad - u * 1.6f, right, r.bottom - pad), u)
     }
 
     /** Time, then the date and Hijri date. The time shrinks to fit [maxW] so it never runs into the cards. */
@@ -164,7 +262,7 @@ class DashboardView(context: Context) : View(context) {
             hijriDay = day
         }
         warm.textSize = u * 0.55f
-        canvas.drawText(hijri, left, top + u * 3.7f, warm)
+        if (on(Feature.HIJRI)) canvas.drawText(hijri, left, top + u * 3.7f, warm)
     }
 
     private fun drawSpeed(canvas: Canvas, left: Float, baseline: Float, size: Float, u: Float) {
@@ -250,9 +348,20 @@ class DashboardView(context: Context) : View(context) {
         canvas.drawText(String.format(Locale.US, "H %.0f°  L %.0f°", w.highC, w.lowC), lx, r.top + u * 1.5f, dim)
     }
 
-    private fun drawDock(canvas: Canvas, l: Float, t: Float, r: Float, b: Float, u: Float) {
-        canvas.drawRoundRect(RectF(l, t, r, b), u * 0.5f, u * 0.5f, card)
+    /** The shortcut bar, with the ⚙ settings button at its foot (shown even when the bar is turned off). */
+    private fun drawDock(canvas: Canvas, l: Float, t0: Float, r: Float, b0: Float, u: Float) {
         dockRects.clear()
+        val gear = RectF(l, b0 - (r - l), r, b0)
+        settingsRect.set(gear)
+        if (!on(Feature.DOCK)) {
+            canvas.drawRoundRect(gear, u * 0.5f, u * 0.5f, card)
+            drawGear(canvas, gear)
+            return
+        }
+        canvas.drawRoundRect(RectF(l, t0, r, b0), u * 0.5f, u * 0.5f, card)
+        drawGear(canvas, gear)
+        val t = t0
+        val b = gear.top
         if (System.currentTimeMillis() - dockLoadedAt > 15_000) {
             dockApps = Dock.load(context)
             dockLoadedAt = System.currentTimeMillis()
@@ -278,6 +387,12 @@ class DashboardView(context: Context) : View(context) {
                 canvas.drawText(letter, cx - text.measureText(letter) / 2, cy + size * 0.16f, text)
             }
         }
+    }
+
+    private fun drawGear(canvas: Canvas, r: RectF) {
+        dim.textSize = r.height() * 0.5f
+        val g = "\u2699\uFE0E"
+        canvas.drawText(g, r.centerX() - dim.measureText(g) / 2, r.centerY() + r.height() * 0.17f, dim)
     }
 
     private fun drawStepButton(canvas: Canvas, r: RectF, dir: Int) {
@@ -316,6 +431,16 @@ class DashboardView(context: Context) : View(context) {
     }
 
     companion object {
+        /** How far the radio row is scrolled, shared by every dashboard on the car screen. */
+        var rowScroll = 0f
+        private val live = WeakHashMap<DashboardView, Unit>()
+
+        /** Scrolls the radio row, used for Android Auto's drag gesture. */
+        fun scrollRow(dx: Float) {
+            rowScroll = maxOf(0f, rowScroll + dx)
+            live.keys.toList().forEach { it.postInvalidate() }
+        }
+
         val BG = Color.parseColor("#0E1116")
         val CARD = Color.parseColor("#1A1F27")
         val ACCENT = Color.parseColor("#4FD1C5")

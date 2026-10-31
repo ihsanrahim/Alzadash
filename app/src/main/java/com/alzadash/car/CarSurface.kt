@@ -14,6 +14,7 @@ import androidx.car.app.SurfaceContainer
 import com.alzadash.core.Input
 import com.alzadash.core.Pkg
 import com.alzadash.core.Shell
+import com.alzadash.core.Station
 import com.alzadash.core.TripTracker
 import java.lang.ref.WeakReference
 
@@ -33,6 +34,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         private set
     var onDock: (DockApp) -> Unit = {}
     var onRadioStep: (Int) -> Unit = {}
+    var onStation: (Station) -> Unit = {}
+    var onSettings: () -> Unit = {}
     private var display: VirtualDisplay? = null
     private var presentation: DashPresentation? = null
     private var visible = Rect()
@@ -88,6 +91,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             it.setVisibleArea(visible)
             it.onDock = { app -> onDock(app) }
             it.onRadioStep = { d -> onRadioStep(d) }
+            it.onStation = { st -> onStation(st) }
+            it.onSettings = { onSettings() }
             it.setMode(if (mode == Mode.APP) Mode.DASH else mode)
         }
         if (mode == Mode.APP) mode = Mode.DASH
@@ -135,8 +140,11 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             val cx = width / 2f
             val cy = height / 2f
             Shell.swipe(id, cx, cy, cx - distanceX * 3, cy - distanceY * 3)
-        } else {
+        } else if (mode == Mode.WEB) {
             presentation?.drag(distanceX, distanceY)
+        } else {
+            // On the dashboard a sideways drag scrolls the radio row.
+            DashboardView.scrollRow(distanceX)
         }
     }
 

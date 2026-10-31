@@ -26,6 +26,8 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
     init {
         surface.onDock = { app -> openDock(app) }
         surface.onRadioStep = { delta -> Radio.step(carContext, delta) { say(it) } }
+        surface.onStation = { st -> Radio.play(carContext, st) { say(it) } }
+        surface.onSettings = { screenManager.push(SettingsScreen(carContext)) }
     }
 
     override fun onGetTemplate(): Template {

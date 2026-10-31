@@ -24,6 +24,7 @@ class SplitActivity : Activity() {
         dash = DashboardView(this).apply {
             onDockTap = { app -> car?.onDock?.invoke(app) }
             onRadioStep = { d -> car?.onRadioStep?.invoke(d) }
+            onStationTap = { st -> car?.onStation?.invoke(st) }
             val tick = object : Runnable {
                 override fun run() {
                     invalidate()

@@ -18,6 +18,7 @@ val DEFAULT_STATIONS = listOf(
     Station("Suria FM", "", "suria"),
     Station("Molek FM", "", "molek"),
     Station("Zayan", "", "zayan"),
+    Station("IKIM", "", "ikim"),
     Station("Mix", "", "mix"),
     Station("Lite", "", "lite"),
     Station("Fly FM", "", "fly fm"),
@@ -25,6 +26,9 @@ val DEFAULT_STATIONS = listOf(
     Station("Traxx FM", "", "traxx"),
     Station("Nasional FM", "", "nasional"),
 )
+
+/** Stations shown first on the car screen's radio row, in this order. The rest follow as saved. */
+private val ROW_FIRST = listOf("bfm", "traxx", "hitz", "mix", "ikim", "zayan", "lite")
 
 /** Small wrapper around SharedPreferences for everything the user can set. */
 class Prefs(context: Context) {
@@ -43,6 +47,26 @@ class Prefs(context: Context) {
             val arr = JSONArray()
             value.forEach { arr.put(JSONObject().put("name", it.name).put("url", it.url).put("search", it.search)) }
             sp.edit().putString(KEY_STATIONS, arr.toString()).apply()
+        }
+
+    /** Stations in radio row order: [ROW_FIRST] first, then the rest. Also the order ◀ ▶ steps through. */
+    val orderedStations: List<Station>
+        get() {
+            var list = stations
+            // Lists saved before IKIM was built in get it once.
+            if (!sp.getBoolean("ikim_added", false)) {
+                sp.edit().putBoolean("ikim_added", true).apply()
+                if (sp.contains(KEY_STATIONS) && list.none { it.name.lowercase().startsWith("ikim") }) {
+                    list = list + Station("IKIM", "", "ikim")
+                    stations = list
+                }
+            }
+            fun rank(st: Station): Int {
+                val n = st.name.lowercase()
+                val i = ROW_FIRST.indexOfFirst { n.startsWith(it) }
+                return if (i < 0) ROW_FIRST.size else i
+            }
+            return list.sortedBy { rank(it) } // stable, so the rest keep their saved order
         }
 
     var lastStationName: String?

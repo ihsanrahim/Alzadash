@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -21,6 +22,8 @@ import com.alzadash.core.Launch
 import com.alzadash.core.NowPlaying
 import com.alzadash.core.Pkg
 import com.alzadash.core.Prefs
+import com.alzadash.core.Feature
+import com.alzadash.core.Features
 import com.alzadash.core.Shell
 
 /** The phone companion: quick launch buttons, tools and setup. */
@@ -113,11 +116,23 @@ class MainActivity : AppCompatActivity() {
             bigButton("Allow permissions", accent) { requestPermissions() },
             bigButton("Show song on dash") { openNowPlayingAccess() },
         ))
-        col.addView(toggle("Welcome sound", prefs.welcomeSound) { prefs.welcomeSound = it })
-        col.addView(toggle("Auto start on car Bluetooth", prefs.autoStartOnBluetooth) { prefs.autoStartOnBluetooth = it })
-        col.addView(toggle("Resume radio on connect", prefs.resumeRadioOnConnect) { prefs.resumeRadioOnConnect = it })
         col.addView(textField("Car Bluetooth name (blank = any)", prefs.carBluetoothName) { prefs.carBluetoothName = it })
         col.addView(textField("Home address", prefs.homeAddress) { prefs.homeAddress = it })
+
+        // Same switches as the ⚙ button on the car screen.
+        col.addView(heading("SETTINGS"))
+        settingsBoxes.clear()
+        Feature.values().forEach { f ->
+            val box = CheckBox(this).apply {
+                text = f.label
+                textSize = 17f
+                minHeight = dp(52)
+                isChecked = Features.on(this@MainActivity, f)
+                setOnCheckedChangeListener { _, checked -> Features.set(this@MainActivity, f, checked) }
+            }
+            settingsBoxes[f] = box
+            col.addView(box)
+        }
 
         col.addView(heading("ON THE CAR SCREEN"))
         col.addView(note(
@@ -136,8 +151,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val settingsBoxes = HashMap<Feature, CheckBox>()
+
     override fun onResume() {
         super.onResume()
+        settingsBoxes.forEach { (f, box) -> box.isChecked = Features.on(this, f) }
         updateShizuku()
     }
 

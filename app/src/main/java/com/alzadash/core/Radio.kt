@@ -54,7 +54,7 @@ object Radio {
 
     /** Plays the station [delta] places after the current one (wrapping round). Used by ◀ ▶ and the steering wheel. */
     fun step(context: Context, delta: Int, onError: (String) -> Unit = {}) {
-        val stations = Prefs(context).stations
+        val stations = Prefs(context).orderedStations
         if (stations.isEmpty()) return
         val cur = current ?: Prefs(context).lastStation
         val idx = stations.indexOfFirst { it.name == cur?.name }

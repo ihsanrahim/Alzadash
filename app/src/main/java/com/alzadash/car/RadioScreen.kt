@@ -20,7 +20,7 @@ class RadioScreen(carContext: CarContext) : Screen(carContext) {
                 screenManager.pop()
             }.build())
         }
-        Prefs(carContext).stations.forEach { st ->
+        Prefs(carContext).orderedStations.forEach { st ->
             val row = Row.Builder().setTitle(st.name).setOnClickListener {
                 Radio.play(carContext, st)
                 screenManager.pop()
