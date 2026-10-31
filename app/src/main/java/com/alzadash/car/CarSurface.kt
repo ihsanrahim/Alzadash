@@ -36,6 +36,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     var onRadioStep: (Int) -> Unit = {}
     var onStation: (Station) -> Unit = {}
     var onSettings: () -> Unit = {}
+    var onOpenApp: (String) -> Unit = {}
     private var display: VirtualDisplay? = null
     private var presentation: DashPresentation? = null
     private var visible = Rect()
@@ -93,6 +94,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             it.onRadioStep = { d -> onRadioStep(d) }
             it.onStation = { st -> onStation(st) }
             it.onSettings = { onSettings() }
+            it.onOpenApp = { pkg -> onOpenApp(pkg) }
             it.setMode(if (mode == Mode.APP) Mode.DASH else mode)
         }
         if (mode == Mode.APP) mode = Mode.DASH
@@ -143,8 +145,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         } else if (mode == Mode.WEB) {
             presentation?.drag(distanceX, distanceY)
         } else {
-            // On the dashboard a sideways drag scrolls the radio row.
-            DashboardView.scrollRow(distanceX)
+            // On the dashboard a sideways drag scrolls the radio row; on the lyrics page it scrolls the lyrics.
+            if (DashboardView.lyricsOpen) DashboardView.scrollLyrics(distanceY) else DashboardView.scrollRow(distanceX)
         }
     }
 

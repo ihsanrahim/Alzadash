@@ -10,6 +10,7 @@ enum class Feature(val label: String, val default: Boolean = true) {
     WEATHER("Weather"),
     RADIO_ROW("Radio station row"),
     NOW_PLAYING("Now playing bar"),
+    LYRICS("Song lyrics"),
     DOCK("Shortcut bar"),
     BACKGROUND("Background picture"),
     WELCOME("Welcome sound"),

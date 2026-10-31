@@ -28,6 +28,12 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
         surface.onRadioStep = { delta -> Radio.step(carContext, delta) { say(it) } }
         surface.onStation = { st -> Radio.play(carContext, st) { say(it) } }
         surface.onSettings = { screenManager.push(SettingsScreen(carContext)) }
+        surface.onOpenApp = { pkg ->
+            DashboardView.showLyrics(false)
+            val pm = carContext.packageManager
+            val label = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
+            openDock(DockApp(label, pkg))
+        }
     }
 
     override fun onGetTemplate(): Template {

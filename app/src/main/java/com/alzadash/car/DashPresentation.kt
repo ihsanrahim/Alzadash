@@ -41,6 +41,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     var onRadioStep: (Int) -> Unit = {}
     var onStation: (com.alzadash.core.Station) -> Unit = {}
     var onSettings: () -> Unit = {}
+    var onOpenApp: (String) -> Unit = {}
     private val handler = Handler(Looper.getMainLooper())
 
     private val tick = object : Runnable {
@@ -60,6 +61,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
             onRadioStep = { d -> this@DashPresentation.onRadioStep(d) }
             onStationTap = { st -> onStation(st) }
             onSettingsTap = { onSettings() }
+            onOpenApp = { pkg -> this@DashPresentation.onOpenApp(pkg) }
         }
         videoLayer = FrameLayout(ctx).apply { visibility = View.GONE }
         block = TextView(ctx).apply {

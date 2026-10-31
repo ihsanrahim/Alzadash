@@ -16,11 +16,14 @@ import com.alzadash.core.Background
 import com.alzadash.core.Feature
 import com.alzadash.core.Features
 import com.alzadash.core.Hijri
+import com.alzadash.core.LyricLine
+import com.alzadash.core.Lyrics
 import com.alzadash.core.NowPlaying
 import com.alzadash.core.Prayer
 import com.alzadash.core.Prefs
 import com.alzadash.core.Radio
 import com.alzadash.core.Station
+import com.alzadash.core.Track
 import com.alzadash.core.TripTracker
 import com.alzadash.core.Weather
 import java.util.Calendar
@@ -70,16 +73,25 @@ class DashboardView(context: Context) : View(context) {
     /** Called when the ⚙ settings button is tapped. */
     var onSettingsTap: () -> Unit = {}
 
+    /** Called from the lyrics page to open the music app itself on the car screen. */
+    var onOpenApp: (String) -> Unit = {}
+
     private var hijri = ""
     private var hijriDay = -1
     private val rowRect = RectF()
     private val chipRects = mutableListOf<Pair<RectF, Station>>()
     private val settingsRect = RectF()
+    private val musicRect = RectF()
+    private val closeRect = RectF()
+    private val openAppRect = RectF()
+    private var track: Track? = null
     private var rowMax = 0f
     private var downX = 0f
     private var lastX = 0f
     private var dragging = false
     private var dragInRow = false
+    private var downY = 0f
+    private var lastY = 0f
 
     init {
         live[this] = Unit
@@ -92,10 +104,18 @@ class DashboardView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN -> {
                 downX = event.x
                 lastX = event.x
+                downY = event.y
+                lastY = event.y
                 dragging = false
                 dragInRow = rowRect.contains(event.x, event.y)
             }
             MotionEvent.ACTION_MOVE -> {
+                if (lyricsOpen) {
+                    if (abs(event.y - downY) > height / 60f) dragging = true
+                    if (dragging) scrollLyrics(lastY - event.y)
+                    lastY = event.y
+                    return true
+                }
                 if (dragInRow && abs(event.x - downX) > width / 80f) dragging = true
                 if (dragging) {
                     scrollRow(lastX - event.x)
@@ -108,10 +128,18 @@ class DashboardView(context: Context) : View(context) {
     }
 
     private fun tap(x: Float, y: Float) {
+        if (lyricsOpen) {
+            when {
+                closeRect.contains(x, y) -> showLyrics(false)
+                openAppRect.contains(x, y) -> track?.pkg?.takeIf { it.isNotEmpty() }?.let { onOpenApp(it) }
+            }
+            return
+        }
         when {
             settingsRect.contains(x, y) -> onSettingsTap()
             prevRect.contains(x, y) -> onRadioStep(-1)
             nextRect.contains(x, y) -> onRadioStep(1)
+            musicRect.contains(x, y) && track != null -> showLyrics(true)
             rowRect.contains(x, y) -> chipRects.firstOrNull { it.first.contains(x, y) }?.let { onStationTap(it.second) }
             else -> dockRects.firstOrNull { it.first.contains(x, y) }?.let { onDockTap(it.second) }
         }
@@ -135,6 +163,14 @@ class DashboardView(context: Context) : View(context) {
         settingsRect.setEmpty()
         prevRect.setEmpty()
         nextRect.setEmpty()
+        musicRect.setEmpty()
+        track = if (on(Feature.LYRICS) || on(Feature.NOW_PLAYING)) NowPlaying.read(context) else null
+        if (lyricsOpen) {
+            if (track == null) lyricsOpen = false else {
+                drawLyricsPage(canvas, panel ?: RectF(if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea))
+                return
+            }
+        }
         val (lat, lng) = TripTracker.position(context)
         Weather.refreshIfStale(lat, lng)
         panel?.let {
@@ -158,12 +194,12 @@ class DashboardView(context: Context) : View(context) {
         drawClock(canvas, left, top, colL - left - u * 0.4f, u * 2.3f, u)
 
         if (on(Feature.SPEED)) {
-            val speedY = top + u * 5.25f
-            drawSpeed(canvas, left, speedY, u * 1.5f, u)
-            dim.textSize = u * 0.42f
+            val speedY = top + u * 5.0f
+            drawSpeed(canvas, left, speedY, u * 1.35f, u)
+            dim.textSize = u * 0.4f
             val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
                 TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
-            canvas.drawText(trip, left, speedY + u * 0.7f, dim)
+            canvas.drawText(trip, left, speedY + u * 0.62f, dim)
         }
 
         // Right column: prayer card and weather card.
@@ -175,14 +211,14 @@ class DashboardView(context: Context) : View(context) {
             y = prayerRect.bottom + u * 0.3f
         }
         if (on(Feature.WEATHER)) {
-            val wRect = RectF(colL, y, right, y + u * 2.0f)
+            val wRect = RectF(colL, y, right, y + u * 1.75f)
             canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
             drawWeather(canvas, wRect, u)
         }
 
-        // Bottom: station row, then what's playing.
-        if (on(Feature.RADIO_ROW)) drawRadioRow(canvas, RectF(left, top + u * 6.3f, right, top + u * 7.2f), u)
-        if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, bottom - u * 1.5f, right, bottom), u)
+        // Bottom: station row, then what's playing with the line being sung.
+        if (on(Feature.RADIO_ROW)) drawRadioRow(canvas, RectF(left, top + u * 5.95f, right, top + u * 6.75f), u)
+        if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, bottom - u * 2.0f, right, bottom), u)
     }
 
     /** Radio stations side by side, seven at a time; drag sideways to see the rest. */
@@ -242,7 +278,7 @@ class DashboardView(context: Context) : View(context) {
             canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
             drawWeather(canvas, wRect, u)
         }
-        if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, r.bottom - pad - u * 1.6f, right, r.bottom - pad), u)
+        if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, r.bottom - pad - u * 2.0f, right, r.bottom - pad), u)
     }
 
     /** Time, then the date and Hijri date. The time shrinks to fit [maxW] so it never runs into the cards. */
@@ -275,28 +311,145 @@ class DashboardView(context: Context) : View(context) {
         canvas.drawText("km/h", left + text.measureText(speedText) + u * 0.25f, baseline, accent)
     }
 
-    /** What's playing, with ◀ ▶ to change radio station. */
+    /**
+     * What's playing: song and artist from YouTube, Spotify or any music app, with the lyric
+     * line being sung underneath; or the radio station. ◀ ▶ change radio station.
+     */
     private fun drawNowPlaying(canvas: Canvas, npRect: RectF, u: Float) {
         canvas.drawRoundRect(npRect, u * 0.4f, u * 0.4f, card)
         val station = Radio.current
-        val track = NowPlaying.read(context)
-        val (label, line) = when {
-            track != null -> "NOW PLAYING" to listOf(track.title, track.artist).filter { it.isNotBlank() }.joinToString(" · ")
-            station != null -> "RADIO" to station.name
-            else -> "INSTANT RADIO" to "Tap the radio button to pick a station"
-        }
-        val btn = npRect.height() * 0.7f
+        val t = track
+        val btn = minOf(npRect.height() * 0.6f, u * 1.1f)
         val by = npRect.centerY()
         nextRect.set(npRect.right - u * 0.4f - btn, by - btn / 2, npRect.right - u * 0.4f, by + btn / 2)
         prevRect.set(nextRect.left - u * 0.3f - btn, nextRect.top, nextRect.left - u * 0.3f, nextRect.bottom)
         drawStepButton(canvas, prevRect, -1)
         drawStepButton(canvas, nextRect, 1)
-        accent.textSize = u * 0.38f
-        canvas.drawText(label, npRect.left + u * 0.5f, npRect.top + u * 0.6f, accent)
-        text.typeface = Typeface.DEFAULT
-        text.textSize = u * 0.6f
-        val maxW = prevRect.left - npRect.left - u
-        canvas.drawText(ellipsize(line, text, maxW), npRect.left + u * 0.5f, npRect.top + u * 1.3f, text)
+        val x = npRect.left + u * 0.5f
+        val maxW = prevRect.left - x - u * 0.4f
+        accent.textSize = u * 0.36f
+        text.typeface = bold
+        text.textSize = u * 0.52f
+        when {
+            t != null -> {
+                musicRect.set(npRect.left, npRect.top, prevRect.left - u * 0.2f, npRect.bottom)
+                canvas.drawText(ellipsize("NOW PLAYING · ${appName(t.pkg)}", accent, maxW), x, npRect.top + u * 0.55f, accent)
+                canvas.drawText(ellipsize(t.title, text, maxW), x, npRect.top + u * 1.12f, text)
+                dim.textSize = u * 0.4f
+                val artistY = npRect.top + u * 1.6f
+                canvas.drawText(ellipsize(t.artist, dim, maxW), x, artistY, dim)
+                if (on(Feature.LYRICS) && npRect.height() >= u * 1.9f) {
+                    val lines = Lyrics.get(t)
+                    val lyric = when {
+                        lines == null -> "Finding lyrics…"
+                        lines.isEmpty() -> ""
+                        else -> Lyrics.currentIndex(lines, t.positionMs).let { i ->
+                            if (i >= 0) lines[i].text.ifBlank { "♪" } else if (lines[0].atMs < 0) "Tap for lyrics" else "♪"
+                        }
+                    }
+                    // Lyrics go on the artist's line, after the name, so the card stays two lines tall.
+                    val aw = dim.measureText(t.artist) + u * 0.4f
+                    warm.textSize = u * 0.4f
+                    if (lyric.isNotEmpty() && aw < maxW * 0.6f) {
+                        canvas.drawText(ellipsize(lyric, warm, maxW - aw), x + aw, artistY, warm)
+                    }
+                }
+            }
+            station != null -> {
+                canvas.drawText("RADIO", x, npRect.top + u * 0.55f, accent)
+                canvas.drawText(ellipsize(station.name, text, maxW), x, npRect.top + u * 1.12f, text)
+            }
+            else -> {
+                canvas.drawText("INSTANT RADIO", x, npRect.top + u * 0.55f, accent)
+                text.typeface = Typeface.DEFAULT
+                canvas.drawText(ellipsize("Pick a station above", text, maxW), x, npRect.top + u * 1.12f, text)
+            }
+        }
+    }
+
+    private fun appName(pkg: String): String = try {
+        val pm = context.packageManager
+        pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+    } catch (_: Exception) {
+        "Music"
+    }
+
+    /**
+     * The full lyrics of the song playing, following along as it's sung. While the car is
+     * moving only the current and next line are shown, large, so it can be read at a glance.
+     */
+    private fun drawLyricsPage(canvas: Canvas, r: RectF) {
+        val t = track ?: return
+        val u = min(r.height() / 10f, r.width() / 12f)
+        val pad = u * 0.5f
+        val left = r.left + pad
+        val right = r.right - pad
+        // Header: song, artist, open-in-app and close buttons.
+        val bh = u * 1.1f
+        closeRect.set(right - bh, r.top + pad, right, r.top + pad + bh)
+        canvas.drawOval(closeRect, card)
+        text.typeface = bold
+        text.textSize = u * 0.55f
+        canvas.drawText("✕", closeRect.centerX() - text.measureText("✕") / 2, closeRect.centerY() + u * 0.2f, text)
+        val appLabel = "Open ${appName(t.pkg)}"
+        accent.textSize = u * 0.42f
+        val ow = accent.measureText(appLabel) + u * 0.8f
+        openAppRect.set(closeRect.left - u * 0.3f - ow, closeRect.top, closeRect.left - u * 0.3f, closeRect.bottom)
+        canvas.drawRoundRect(openAppRect, bh / 2, bh / 2, card)
+        canvas.drawText(appLabel, openAppRect.left + u * 0.4f, openAppRect.centerY() + u * 0.15f, accent)
+        val headW = openAppRect.left - left - u * 0.3f
+        canvas.drawText(ellipsize(t.title, text, headW), left, r.top + pad + u * 0.6f, text)
+        dim.textSize = u * 0.42f
+        canvas.drawText(ellipsize(t.artist, dim, headW), left, r.top + pad + u * 1.15f, dim)
+
+        val body = RectF(left, r.top + pad + bh + u * 0.4f, right, r.bottom - pad)
+        val lines = Lyrics.get(t)
+        if (lines == null || lines.isEmpty()) {
+            dim.textSize = u * 0.5f
+            val msg = if (lines == null) "Finding lyrics…" else "No lyrics found for this song"
+            canvas.drawText(msg, body.centerX() - dim.measureText(msg) / 2, body.centerY(), dim)
+            return
+        }
+        val cur = Lyrics.currentIndex(lines, t.positionMs)
+        if (!TripTracker.isParked() && cur >= 0) {
+            drawGlance(canvas, body, lines, cur, u)
+            return
+        }
+        drawAllLines(canvas, body, lines, cur, u)
+    }
+
+    private fun drawGlance(canvas: Canvas, body: RectF, lines: List<LyricLine>, cur: Int, u: Float) {
+        warm.textSize = u * 0.85f
+        warm.typeface = bold
+        val now = ellipsize(lines[cur].text.ifBlank { "♪" }, warm, body.width())
+        canvas.drawText(now, body.centerX() - warm.measureText(now) / 2, body.centerY(), warm)
+        warm.typeface = Typeface.DEFAULT
+        lines.getOrNull(cur + 1)?.let {
+            dim.textSize = u * 0.55f
+            val next = ellipsize(it.text, dim, body.width())
+            canvas.drawText(next, body.centerX() - dim.measureText(next) / 2, body.centerY() + u * 1.1f, dim)
+        }
+    }
+
+    private fun drawAllLines(canvas: Canvas, body: RectF, lines: List<LyricLine>, cur: Int, u: Float) {
+        val lh = u * 0.8f
+        val total = lines.size * lh
+        // Follow the song unless the lyrics were scrolled by hand in the last few seconds.
+        val follow = cur >= 0 && System.currentTimeMillis() - lyricsTouchedAt > 5000
+        if (follow) lyricsScroll = cur * lh - body.height() / 3
+        lyricsScroll = lyricsScroll.coerceIn(0f, maxOf(0f, total - body.height() / 2))
+        canvas.save()
+        canvas.clipRect(body)
+        lines.forEachIndexed { i, line ->
+            val y = body.top + lh + i * lh - lyricsScroll
+            if (y < body.top || y > body.bottom + lh) return@forEachIndexed
+            val p = if (i == cur) warm else if (cur >= 0 && i < cur) dim else text
+            p.typeface = if (i == cur) bold else Typeface.DEFAULT
+            p.textSize = if (i == cur) u * 0.6f else u * 0.5f
+            canvas.drawText(ellipsize(line.text, p, body.width()), body.left, y, p)
+        }
+        canvas.restore()
+        warm.typeface = Typeface.DEFAULT
     }
 
     /** Compact solat card: next prayer and countdown on one line, today's times underneath in [cols] columns. */
@@ -433,6 +586,25 @@ class DashboardView(context: Context) : View(context) {
     companion object {
         /** How far the radio row is scrolled, shared by every dashboard on the car screen. */
         var rowScroll = 0f
+
+        /** True while the full lyrics page is showing instead of the dashboard. */
+        var lyricsOpen = false
+            private set
+        private var lyricsScroll = 0f
+        private var lyricsTouchedAt = 0L
+
+        fun showLyrics(open: Boolean) {
+            lyricsOpen = open
+            lyricsTouchedAt = 0L
+            live.keys.toList().forEach { it.postInvalidate() }
+        }
+
+        /** Scrolls the lyrics page by hand; it goes back to following the song after a few seconds. */
+        fun scrollLyrics(dy: Float) {
+            lyricsScroll += dy
+            lyricsTouchedAt = System.currentTimeMillis()
+            live.keys.toList().forEach { it.postInvalidate() }
+        }
         private val live = WeakHashMap<DashboardView, Unit>()
 
         /** Scrolls the radio row, used for Android Auto's drag gesture. */

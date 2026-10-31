@@ -21,6 +21,7 @@ class CoverActivity : Activity() {
                 onRadioStep = { d -> CarSurface.active?.get()?.onRadioStep?.invoke(d) }
                 onStationTap = { st -> CarSurface.active?.get()?.onStation?.invoke(st) }
                 onSettingsTap = { CarSurface.active?.get()?.onSettings?.invoke() }
+                onOpenApp = { pkg -> CarSurface.active?.get()?.onOpenApp?.invoke(pkg) }
                 val tick = object : Runnable {
                     override fun run() {
                         invalidate()
