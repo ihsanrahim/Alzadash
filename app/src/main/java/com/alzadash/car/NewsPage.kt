@@ -12,11 +12,7 @@ import android.graphics.Typeface
 import android.text.format.DateFormat
 import com.alzadash.core.News
 import com.alzadash.core.NewsItem
-import com.alzadash.core.NowPlaying
-import com.alzadash.core.Prayer
-import com.alzadash.core.Radio
 import com.alzadash.core.TripTracker
-import com.alzadash.core.Weather
 import java.util.Date
 import java.util.Locale
 import kotlin.math.min
@@ -144,23 +140,27 @@ class NewsPage(private val context: Context) {
         val hero = RectF(r.left, r.top, r.left + heroW, r.top + heroH)
         drawHero(canvas, items[0], hero, u)
 
-        // Side cards.
+        // More headlines beside the top story.
         val side = RectF(hero.right + gap, r.top, r.right, hero.bottom)
-        val ch = (side.height() - gap * 2) / 3
-        val (lat, lng) = TripTracker.position(context)
-        val w = Weather.now
-        sideCard(canvas, RectF(side.left, side.top, side.right, side.top + ch), u, "WEATHER",
-            w?.let { String.format(Locale.US, "%.0f°C · %s", it.tempC, it.label) } ?: "Loading…",
-            w?.let { String.format(Locale.US, "H %.0f°  L %.0f°", it.highC, it.lowC) } ?: "")
-        val next = Prayer.next(lat, lng, System.currentTimeMillis())
-        val mins = (next.atMillis - System.currentTimeMillis()).coerceAtLeast(0) / 60_000
-        sideCard(canvas, RectF(side.left, side.top + ch + gap, side.right, side.top + ch * 2 + gap), u, "NEXT PRAYER",
-            "${next.name} ${DateFormat.getTimeFormat(context).format(Date(next.atMillis))}",
-            if (mins >= 60) "in ${mins / 60}h ${mins % 60}m" else "in ${mins}m")
-        val track = NowPlaying.read(context)
-        sideCard(canvas, RectF(side.left, side.top + (ch + gap) * 2, side.right, side.bottom), u, "NOW PLAYING",
-            track?.title ?: Radio.current?.name ?: "Nothing playing",
-            track?.artist ?: if (Radio.current != null) "Radio" else "")
+        canvas.drawRoundRect(side, u * 0.2f, u * 0.2f, panel)
+        soft.textSize = u * 0.22f
+        canvas.drawText("MORE HEADLINES", side.left + u * 0.3f, side.top + u * 0.42f, soft)
+        val more = items.drop(5).take(4)
+        val rowH = (side.height() - u * 0.6f) / 4
+        more.forEachIndexed { i, item ->
+            val cell = RectF(side.left, side.top + u * 0.6f + i * rowH, side.right, side.top + u * 0.6f + (i + 1) * rowH)
+            white.typeface = bold
+            white.textSize = u * 0.26f
+            var ty = cell.top + u * 0.3f
+            for (line in wrap(item.title, white, cell.width() - u * 0.6f, 2)) {
+                canvas.drawText(line, cell.left + u * 0.3f, ty, white)
+                ty += u * 0.32f
+            }
+            soft.textSize = u * 0.2f
+            canvas.drawText(listOf(item.source, News.ago(item.timeMs)).filter { it.isNotEmpty() }.joinToString(" · "),
+                cell.left + u * 0.3f, ty, soft)
+            targets += cell to { Action.Open(item.link) }
+        }
 
         // Four more stories.
         val row = RectF(r.left, hero.bottom + gap, r.right, r.bottom)

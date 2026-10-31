@@ -11,6 +11,7 @@ import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
+import com.alzadash.core.DashLayout
 import com.alzadash.core.Input
 import com.alzadash.core.Pkg
 import com.alzadash.core.Shell
@@ -84,6 +85,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         width = container.width
         height = container.height
         dpi = container.dpi
+        if (visible.isEmpty && height > 0) DashLayout.saveCarAspect(carContext, width.toFloat() / height)
         val dm = carContext.getSystemService(DisplayManager::class.java)
         val vd = dm.createVirtualDisplay("AlzaDash", width, height, container.dpi, surface, 0)
         display = vd
@@ -104,6 +106,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         visible = Rect(visibleArea)
         presentation?.setVisibleArea(visible)
+        if (!visible.isEmpty) DashLayout.saveCarAspect(carContext, visible.width().toFloat() / visible.height())
         SplitActivity.relayout()
     }
 

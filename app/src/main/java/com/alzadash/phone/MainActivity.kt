@@ -10,11 +10,11 @@ import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 import com.alzadash.car.CarSurface
 import com.alzadash.core.Background
 import com.alzadash.core.Bookmark
@@ -48,128 +48,128 @@ class MainActivity : AppCompatActivity() {
         prefs = Prefs(this)
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(32))
+            setPadding(dp(12), dp(12), dp(12), dp(24))
         }
         val accent = getColor(com.alzadash.R.color.accent)
 
-        col.addView(heading("QUICK LAUNCH"))
-        col.addView(buttonRow(
-            bigButton("Play Store") { Launch.app(this, Pkg.PLAY_STORE) },
-            bigButton("Netflix") { Launch.app(this, Pkg.NETFLIX) },
-        ))
-        col.addView(buttonRow(
-            bigButton("YouTube") { Launch.app(this, Pkg.YOUTUBE) },
-            bigButton("Disney+ Hotstar") { Launch.app(this, "in.startv.hotstar.dplus") },
-        ))
-        col.addView(buttonRow(
-            bigButton("Gemini", accent) { Launch.gemini(this) },
-        ))
-        col.addView(buttonRow(
-            bigButton("Google Maps") { Launch.app(this, Pkg.MAPS) },
-            bigButton("Waze") { Launch.app(this, Pkg.WAZE) },
-        ))
-
-        col.addView(heading("TOOLS"))
-        col.addView(buttonRow(
-            bigButton("All apps") { startActivity(Intent(this, AppsActivity::class.java)) },
-            bigButton("Install APK") { installApk() },
-        ))
-        col.addView(buttonRow(
-            bigButton("Radio stations") { startActivity(Intent(this, StationsActivity::class.java)) },
-            bigButton("Test welcome sound") { Chime.play() },
-        ))
-
-        col.addView(heading("CAR SCREEN"))
-        col.addView(buttonRow(
-            bigButton("Car shortcuts") { startActivity(Intent(this, DockPickerActivity::class.java)) },
-            bigButton("Background") { chooseBackground() },
-        ))
-        // Typing into an app open on the car screen. Tapping a text box there also brings up this phone's keyboard.
-        val typeBox = EditText(this).apply {
-            hint = "Type here to send to the car screen"
-            isSingleLine = true
-        }
-        col.addView(typeBox)
-        col.addView(buttonRow(
-            bigButton("Send text", accent) {
-                val surface = CarSurface.active?.get()
-                if (surface == null || surface.displayId < 0) {
-                    toast("Connect to the car first")
-                } else if (!Shell.available()) {
-                    toast("Shizuku is needed for this")
-                } else {
-                    surface.typeText(typeBox.text.toString())
-                    typeBox.setText("")
-                }
-            },
-            bigButton("Enter") { CarSurface.active?.get()?.let { Shell.key(it.displayId, 66) } },
-        ))
-
-        // Typing a long web address is easier on the phone than on the car screen.
-        col.addView(heading("CAR BROWSER"))
-        val urlBox = EditText(this).apply {
-            hint = "Search or web address"
-            textSize = 18f
-            isSingleLine = true
-        }
-        col.addView(urlBox)
-        col.addView(buttonRow(
-            bigButton("Open on car", accent) {
-                val surface = CarSurface.active?.get()
-                if (surface == null) toast("Connect to the car first") else {
-                    surface.openUrl(Browser.toUrl(urlBox.text.toString()))
-                    urlBox.setText("")
-                }
-            },
-            bigButton("Bookmark") {
-                val text = urlBox.text.toString().trim()
-                if (text.isEmpty()) toast("Type a web address first") else {
-                    val url = Browser.toUrl(text)
-                    Browser.addBookmark(this, Bookmark(text.removePrefix("https://").removePrefix("www.").take(30), url))
-                    toast("Added to the car browser's start page")
-                    urlBox.setText("")
-                }
-            },
-        ))
-
-        col.addView(heading("SETUP"))
+        col.addView(TextView(this).apply {
+            text = "AlzaDash"
+            textSize = 22f
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setTextColor(android.graphics.Color.WHITE)
+            setPadding(dp(4), 0, dp(4), dp(4))
+        })
+        // What still needs doing, with the fix next to it. Hidden once everything is set up.
         shizukuStatus = note("")
         col.addView(shizukuStatus)
-        col.addView(buttonRow(
-            bigButton("Allow Shizuku", accent) {
-                if (!Shell.running()) toast("Open Shizuku and tap Start first") else Shell.requestPermission()
-                handler.postDelayed({ updateShizuku() }, 1500)
-            },
-        ))
-        col.addView(buttonRow(
-            bigButton("Allow permissions", accent) { requestPermissions() },
-            bigButton("Show song on dash") { openNowPlayingAccess() },
-        ))
-        col.addView(textField("Car Bluetooth name (blank = any)", prefs.carBluetoothName) { prefs.carBluetoothName = it })
-        col.addView(textField("Home address", prefs.homeAddress) { prefs.homeAddress = it })
+        fixRow = buttonRow()
+        col.addView(fixRow)
 
-        // Same switches as the ⚙ button on the car screen.
-        col.addView(heading("SETTINGS"))
-        settingsBoxes.clear()
-        Feature.values().forEach { f ->
-            val box = CheckBox(this).apply {
-                text = f.label
-                textSize = 17f
-                minHeight = dp(52)
-                isChecked = Features.on(this@MainActivity, f)
-                setOnCheckedChangeListener { _, checked -> Features.set(this@MainActivity, f, checked) }
-            }
-            settingsBoxes[f] = box
-            col.addView(box)
+        section(col, "DASHBOARD", true) {
+            it.addView(buttonRow(
+                smallButton("Edit layout", accent) { startActivity(Intent(this, LayoutEditorActivity::class.java)) },
+                smallButton("Shortcuts") { startActivity(Intent(this, DockPickerActivity::class.java)) },
+                smallButton("Background") { chooseBackground() },
+            ))
         }
 
-        col.addView(heading("ON THE CAR SCREEN"))
-        col.addView(note(
-            "In Android Auto settings, tap Version 10 times to unlock developer settings, " +
-                "then turn on Unknown sources. AlzaDash then appears in the car's app list.\n\n" +
-                "Video on the car screen plays only while the car is stopped. While moving, the picture is hidden and only sound continues.\n\n" +
-                "To open YouTube, Netflix and Hotstar as real apps on the car screen, Shizuku must be running and allowed above."
-        ))
+        // One box for everything typed for the car: text for the app on screen, or a web address.
+        section(col, "SEND TO CAR", true) {
+            val box = EditText(this).apply {
+                hint = "Text, search or web address"
+                textSize = 16f
+                isSingleLine = true
+            }
+            it.addView(box)
+            it.addView(buttonRow(
+                smallButton("Type", accent) {
+                    val surface = CarSurface.active?.get()
+                    when {
+                        surface == null || surface.displayId < 0 -> toast("Connect to the car first")
+                        !Shell.available() -> toast("Shizuku is needed for this")
+                        else -> {
+                            surface.typeText(box.text.toString())
+                            box.setText("")
+                        }
+                    }
+                },
+                smallButton("Enter") { CarSurface.active?.get()?.let { s -> Shell.key(s.displayId, 66) } },
+                smallButton("Open web") {
+                    val surface = CarSurface.active?.get()
+                    if (surface == null) toast("Connect to the car first") else {
+                        surface.openUrl(Browser.toUrl(box.text.toString()))
+                        box.setText("")
+                    }
+                },
+                smallButton("Bookmark") {
+                    val text = box.text.toString().trim()
+                    if (text.isEmpty()) toast("Type a web address first") else {
+                        Browser.addBookmark(this, Bookmark(text.removePrefix("https://").removePrefix("www.").take(30), Browser.toUrl(text)))
+                        toast("Added to the car browser's start page")
+                        box.setText("")
+                    }
+                },
+            ))
+        }
+
+        section(col, "QUICK LAUNCH", false) {
+            it.addView(buttonRow(
+                smallButton("Play Store") { Launch.app(this, Pkg.PLAY_STORE) },
+                smallButton("YouTube") { Launch.app(this, Pkg.YOUTUBE) },
+                smallButton("Netflix") { Launch.app(this, Pkg.NETFLIX) },
+            ))
+            it.addView(buttonRow(
+                smallButton("Hotstar") { Launch.app(this, "in.startv.hotstar.dplus") },
+                smallButton("Maps") { Launch.app(this, Pkg.MAPS) },
+                smallButton("Waze") { Launch.app(this, Pkg.WAZE) },
+            ))
+            it.addView(buttonRow(
+                smallButton("Gemini", accent) { Launch.gemini(this) },
+                smallButton("All apps") { startActivity(Intent(this, AppsActivity::class.java)) },
+                smallButton("Install APK") { installApk() },
+            ))
+        }
+
+        // Same switches as the ⚙ button on the car screen, two to a row.
+        section(col, "SETTINGS", false) {
+            settingsBoxes.clear()
+            Feature.values().toList().chunked(2).forEach { pair ->
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                pair.forEach { f ->
+                    val cb = CheckBox(this).apply {
+                        text = f.label
+                        textSize = 14f
+                        isChecked = Features.on(this@MainActivity, f)
+                        setOnCheckedChangeListener { _, checked -> Features.set(this@MainActivity, f, checked) }
+                    }
+                    settingsBoxes[f] = cb
+                    row.addView(cb, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                }
+                it.addView(row)
+            }
+        }
+
+        section(col, "SETUP", false) {
+            it.addView(buttonRow(
+                smallButton("Allow Shizuku", accent) { allowShizuku() },
+                smallButton("Permissions") { requestPermissions() },
+                smallButton("Song access") { openNowPlayingAccess() },
+            ))
+            it.addView(buttonRow(
+                smallButton("Radio stations") { startActivity(Intent(this, StationsActivity::class.java)) },
+                smallButton("Test sound") { Chime.play() },
+            ))
+            it.addView(textField("Car Bluetooth name (blank = any)", prefs.carBluetoothName) { v -> prefs.carBluetoothName = v })
+            it.addView(textField("Home address", prefs.homeAddress) { v -> prefs.homeAddress = v })
+        }
+
+        section(col, "HELP", false) {
+            it.addView(note(
+                "Install updates with KingInstaller (Shizuku Trick) so Android Auto lists AlzaDash.\n\n" +
+                    "Video and web pages on the car screen show only while the car is stopped; sound keeps playing.\n\n" +
+                    "Opening real apps (YouTube, Spotify, Waze) on the car screen and typing into them need Shizuku running and allowed."
+            ))
+        }
 
         setContentView(ScrollView(this).apply { addView(col) })
 
@@ -180,6 +180,36 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private lateinit var fixRow: LinearLayout
+
+    /**
+     * A heading that folds its section away when tapped; whether each is open is remembered.
+     */
+    private fun section(parent: LinearLayout, title: String, openByDefault: Boolean, fill: (LinearLayout) -> Unit) {
+        val key = "section_$title"
+        val sp = getSharedPreferences("alzadash", MODE_PRIVATE)
+        val body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fill(body)
+        val head = heading("")
+        fun show(open: Boolean) {
+            body.visibility = if (open) android.view.View.VISIBLE else android.view.View.GONE
+            head.text = (if (open) "▾  " else "▸  ") + title
+        }
+        show(sp.getBoolean(key, openByDefault))
+        head.setOnClickListener {
+            val open = body.visibility != android.view.View.VISIBLE
+            sp.edit().putBoolean(key, open).apply()
+            show(open)
+        }
+        parent.addView(head)
+        parent.addView(body)
+    }
+
+    private fun allowShizuku() {
+        if (!Shell.running()) toast("Open Shizuku and tap Start first") else Shell.requestPermission()
+        handler.postDelayed({ updateShizuku() }, 1500)
+    }
+
     private val settingsBoxes = HashMap<Feature, CheckBox>()
 
     override fun onResume() {
@@ -188,20 +218,25 @@ class MainActivity : AppCompatActivity() {
         updateShizuku()
     }
 
+    /** Lists only what isn't set up yet, each with its fix button. */
     private fun updateShizuku() {
-        shizukuStatus.text = when {
-            Shell.available() -> "Shizuku: connected. YouTube, Netflix and Hotstar open as real apps on the car screen."
-            Shell.running() -> "Shizuku: running, but AlzaDash isn't allowed yet. Tap Allow Shizuku."
-            else -> "Shizuku: not running. Without it the car screen uses websites instead of the real video apps."
+        val problems = mutableListOf<String>()
+        fixRow.removeAllViews()
+        val accent = getColor(com.alzadash.R.color.accent)
+        if (!Shell.available()) {
+            problems += if (Shell.running()) "Shizuku isn't allowed yet." else "Shizuku isn't running (needed for apps on the car screen)."
+            fixRow.addView(smallButton("Allow Shizuku", accent) { allowShizuku() }, weight())
         }
+        if (!NowPlaying.hasAccess(this)) {
+            problems += "Song names and lyrics need notification access."
+            fixRow.addView(smallButton("Song access", accent) { openNowPlayingAccess() }, weight())
+        }
+        shizukuStatus.text = if (problems.isEmpty()) "✓ All set up" else problems.joinToString("\n")
+        fixRow.visibility = if (problems.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
-    private fun toggle(label: String, value: Boolean, onChange: (Boolean) -> Unit) = SwitchCompat(this).apply {
-        text = label
-        textSize = 17f
-        isChecked = value
-        minHeight = dp(56)
-        setOnCheckedChangeListener { _, checked -> onChange(checked) }
+    private fun weight() = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+        setMargins(dp(6), dp(6), dp(6), dp(6))
     }
 
     private fun textField(hint: String, value: String, onChange: (String) -> Unit) = EditText(this).apply {

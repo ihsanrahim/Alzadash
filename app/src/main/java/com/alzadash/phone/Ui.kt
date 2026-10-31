@@ -50,3 +50,16 @@ fun Context.buttonRow(vararg buttons: Button): LinearLayout = LinearLayout(this)
     }
     layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
 }
+
+/** A compact button for tight rows. */
+fun Context.smallButton(label: String, color: Int = Color.parseColor("#1A1F27"), onClick: () -> Unit): Button =
+    bigButton(label, color, onClick).apply {
+        textSize = 14f
+        minHeight = dp(46)
+        minimumHeight = dp(46)
+        setPadding(dp(4), 0, dp(4), 0)
+        background = GradientDrawable().apply {
+            cornerRadius = dp(12).toFloat()
+            setColor(color)
+        }
+    }

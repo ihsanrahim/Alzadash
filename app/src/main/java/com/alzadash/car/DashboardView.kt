@@ -13,6 +13,7 @@ import android.text.format.DateFormat
 import android.view.MotionEvent
 import android.view.View
 import com.alzadash.core.Background
+import com.alzadash.core.DashLayout
 import com.alzadash.core.Feature
 import com.alzadash.core.Features
 import com.alzadash.core.Hijri
@@ -27,6 +28,7 @@ import com.alzadash.core.Station
 import com.alzadash.core.Track
 import com.alzadash.core.TripTracker
 import com.alzadash.core.Weather
+import com.alzadash.core.Widget
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -183,6 +185,7 @@ class DashboardView(context: Context) : View(context) {
         nextRect.setEmpty()
         musicRect.setEmpty()
         newsRect.setEmpty()
+        dockRects.clear()
         if (newsOpen) {
             newsPage.draw(canvas, panel ?: RectF(if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea))
             postInvalidateDelayed(50) // keeps the LATEST strip moving
@@ -202,50 +205,55 @@ class DashboardView(context: Context) : View(context) {
             drawColumn(canvas, it, lat, lng)
             return
         }
-        val a = if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea
-        val u = min(a.height() / 10f, a.width() / 17f) // one layout unit
-        val pad = u * 0.5f
-        val top = a.top + pad
-        val bottom = a.bottom - pad
-        val dockW = u * 1.9f
-        val left = a.left + pad
-        val right = a.right - pad - dockW - pad
-        val colL = left + (right - left) * 0.5f
-
-        drawDock(canvas, a.right - pad - dockW, top, a.right - pad, bottom, u)
-
-        // Left column: time, dates, speed and trip.
-        drawClock(canvas, left, top, colL - left - u * 0.4f, u * 2.3f, u)
-
-        if (on(Feature.SPEED)) {
-            val speedY = top + u * 5.0f
-            drawSpeed(canvas, left, speedY, u * 1.35f, u)
-            dim.textSize = u * 0.4f
-            val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
-                TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
-            canvas.drawText(trip, left, speedY + u * 0.62f, dim)
+        val a = RectF(if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea)
+        val layout = DashLayout.get(context)
+        var dockShown = false
+        // Each widget sits where the phone's layout editor put it, its text sized to its box.
+        for (w in Widget.values()) {
+            if (w.feature != null && !on(w.feature)) continue
+            val r = DashLayout.place(layout.getValue(w), a)
+            if (r.width() < 4 || r.height() < 4) continue
+            when (w) {
+                Widget.CLOCK -> {
+                    val u = r.height() / 3.9f
+                    drawClock(canvas, r.left, r.top - u * 0.2f, r.width(), u * 2.3f, u)
+                }
+                Widget.SPEED -> {
+                    val u = min(r.height() / 1.8f, r.width() / 6f)
+                    val speedY = r.top + u * 1.15f
+                    drawSpeed(canvas, r.left, speedY, u * 1.35f, u)
+                    dim.textSize = u * 0.4f
+                    val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
+                        TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
+                    canvas.drawText(ellipsize(trip, dim, r.width()), r.left, speedY + u * 0.62f, dim)
+                }
+                Widget.PRAYER -> {
+                    val cols = if (r.width() / r.height() >= 2.8f) 3 else 2
+                    val u = min(r.height() / (if (cols == 3) 2.0f else 2.5f), r.width() / (cols * 2.3f + 0.8f))
+                    canvas.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
+                    drawPrayer(canvas, r, lat, lng, u, cols)
+                }
+                Widget.WEATHER -> {
+                    val u = min(r.height() / 1.75f, r.width() / 6.5f)
+                    canvas.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
+                    drawWeather(canvas, r, u)
+                }
+                Widget.NEWS -> drawNewsTicker(canvas, r, min(r.height() / 1.3f, r.width() / 8f))
+                Widget.RADIO_ROW -> drawRadioRow(canvas, r, r.height() / 0.8f)
+                Widget.NOW_PLAYING -> drawNowPlaying(canvas, r, min(r.height() / 2.0f, r.width() / 10f))
+                Widget.DOCK -> {
+                    drawDock(canvas, r.left, r.top, r.right, r.bottom, r.width() / 1.9f)
+                    dockShown = true
+                }
+            }
         }
-
-        // Right column: prayer card and weather card.
-        var y = top
-        if (on(Feature.PRAYER)) {
-            val prayerRect = RectF(colL, y, right, y + u * 2.0f)
-            canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
-            drawPrayer(canvas, prayerRect, lat, lng, u, 3)
-            y = prayerRect.bottom + u * 0.3f
+        // Without the shortcut bar the ⚙ button still sits in the bottom corner.
+        if (!dockShown) {
+            val s = min(a.width(), a.height()) * 0.1f
+            settingsRect.set(a.right - s * 1.2f, a.bottom - s * 1.2f, a.right - s * 0.2f, a.bottom - s * 0.2f)
+            canvas.drawRoundRect(settingsRect, s * 0.25f, s * 0.25f, card)
+            drawGear(canvas, settingsRect)
         }
-        if (on(Feature.WEATHER)) {
-            val wRect = RectF(colL, y, right, y + u * 1.75f)
-            canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
-            drawWeather(canvas, wRect, u)
-            y = wRect.bottom + u * 0.3f
-        }
-        val newsBottom = top + if (on(Feature.RADIO_ROW)) u * 5.65f else u * 6.6f
-        if (on(Feature.NEWS) && newsBottom - y >= u * 1.0f) drawNewsTicker(canvas, RectF(colL, y, right, newsBottom), u)
-
-        // Bottom: station row, then what's playing with the line being sung.
-        if (on(Feature.RADIO_ROW)) drawRadioRow(canvas, RectF(left, top + u * 5.95f, right, top + u * 6.75f), u)
-        if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, bottom - u * 2.0f, right, bottom), u)
     }
 
     /**
@@ -571,32 +579,30 @@ class DashboardView(context: Context) : View(context) {
     }
 
     /** The shortcut bar, with the ⚙ settings button at its foot (shown even when the bar is turned off). */
-    private fun drawDock(canvas: Canvas, l: Float, t0: Float, r: Float, b0: Float, u: Float) {
-        dockRects.clear()
-        val gear = RectF(l, b0 - (r - l), r, b0)
+    private fun drawDock(canvas: Canvas, l: Float, t: Float, r: Float, b: Float, u: Float) {
+        // Laid out down the bar, or across it when the bar was made wide in the layout editor.
+        val across = r - l > b - t
+        val thick = if (across) b - t else r - l
+        val gear = if (across) RectF(r - thick, t, r, b) else RectF(l, b - thick, r, b)
         settingsRect.set(gear)
-        if (!on(Feature.DOCK)) {
-            canvas.drawRoundRect(gear, u * 0.5f, u * 0.5f, card)
-            drawGear(canvas, gear)
-            return
-        }
-        canvas.drawRoundRect(RectF(l, t0, r, b0), u * 0.5f, u * 0.5f, card)
+        canvas.drawRoundRect(RectF(l, t, r, b), thick * 0.25f, thick * 0.25f, card)
         drawGear(canvas, gear)
-        val t = t0
-        val b = gear.top
         if (System.currentTimeMillis() - dockLoadedAt > 15_000) {
             dockApps = Dock.load(context)
             dockLoadedAt = System.currentTimeMillis()
         }
         val apps = dockApps
         if (apps.isEmpty()) return
-        val slot = (b - t) / maxOf(apps.size, 4)
-        val size = min((r - l) * 0.62f, slot * 0.62f)
+        val length = if (across) gear.left - l else gear.top - t
+        val slot = length / maxOf(apps.size, 4)
+        val size = min(thick * 0.62f, slot * 0.62f)
+        val start = (length - slot * apps.size) / 2
         apps.forEachIndexed { i, app ->
-            val cx = (l + r) / 2
-            val cy = t + (b - t - slot * apps.size) / 2 + slot * i + slot / 2
+            val mid = start + slot * i + slot / 2
+            val cx = if (across) l + mid else (l + r) / 2
+            val cy = if (across) (t + b) / 2 else t + mid
             val rect = RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
-            dockRects += RectF(l, cy - slot / 2, r, cy + slot / 2) to app
+            dockRects += (if (across) RectF(cx - slot / 2, t, cx + slot / 2, b) else RectF(l, cy - slot / 2, r, cy + slot / 2)) to app
             val icon = icons.getOrPut(app.pkg) { Dock.icon(context, app) }
             if (icon != null) {
                 icon.setBounds(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
