@@ -23,7 +23,7 @@ data class NewsItem(
 )
 
 /** A news section. Each feed is tried in turn until one gives stories. */
-data class NewsSection(val name: String, val feeds: List<String>, val group: String? = null)
+data class NewsSection(val name: String, val feeds: List<String>, val group: String? = null, val standings: String? = null)
 
 /**
  * Headlines from RSS feeds: Google News for Malaysia in English and Malay, plus the Malay
@@ -37,6 +37,7 @@ object News {
     private fun site(domain: String) = gn("/search?q=site:$domain+when:2d", "ms")
 
     const val BM = "Berita BM"
+    const val SPORTS = "Sports"
 
     val sections = listOf(
         NewsSection("Top Stories", listOf(gn(""))),
@@ -44,7 +45,11 @@ object News {
         NewsSection("World", listOf(gn("/headlines/section/topic/WORLD"))),
         NewsSection("Business", listOf(gn("/headlines/section/topic/BUSINESS"))),
         NewsSection("Technology", listOf(gn("/headlines/section/topic/TECHNOLOGY"))),
-        NewsSection("Sports", listOf(gn("/headlines/section/topic/SPORTS"))),
+        NewsSection("Headlines", listOf(gn("/headlines/section/topic/SPORTS")), SPORTS),
+        NewsSection("F1", emptyList(), SPORTS, Standings.F1),
+        NewsSection("MotoGP", emptyList(), SPORTS, Standings.MOTOGP),
+        NewsSection("Premier League", emptyList(), SPORTS, Standings.EPL),
+        NewsSection("Liga Super", emptyList(), SPORTS, Standings.LIGA_M),
         NewsSection("Semua", listOf(gn("", "ms")), BM),
         NewsSection("Harian Metro", listOf("https://www.hmetro.com.my/feed", site("hmetro.com.my")), BM),
         NewsSection("Berita Harian", listOf("https://www.bharian.com.my/feed", site("bharian.com.my")), BM),

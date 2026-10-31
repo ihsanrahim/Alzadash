@@ -29,7 +29,8 @@ class NewsPage(private val context: Context) {
     }
 
     private var section = News.sections[0]
-    private var lastBm = News.sections.first { it.group == News.BM }
+    /** The sub-tab last used in each group (Sports, Berita BM), so going back lands there. */
+    private val lastInGroup = mutableMapOf<String, com.alzadash.core.NewsSection>()
     private val targets = mutableListOf<Pair<RectF, () -> Action?>>()
     private var tickerX = 0f
     private var lastFrame = 0L
@@ -73,13 +74,14 @@ class NewsPage(private val context: Context) {
         canvas.drawText(day, close.left - u * 0.3f - soft.measureText(day), y + u * 0.75f, soft)
 
         var tx = left + u * 4.3f
-        val tabs = News.sections.filter { it.group == null }.map { it.name } + News.BM
+        // Top tabs: plain sections, plus one tab per group (Sports, Berita BM) in list order.
+        val tabs = News.sections.map { it.group ?: it.name }.distinct()
         white.textSize = u * 0.32f
         for (name in tabs) {
             val tw = white.measureText(name)
             val cell = RectF(tx - u * 0.2f, y + u * 0.1f, tx + tw + u * 0.2f, y + u * 0.7f)
             if (cell.right > close.left - cw - u * 0.5f) break
-            val selected = if (name == News.BM) section.group == News.BM else section.name == name
+            val selected = section.group == name || (section.group == null && section.name == name)
             if (selected) {
                 outline.strokeWidth = u * 0.04f
                 canvas.drawRoundRect(cell, cell.height() / 2, cell.height() / 2, outline)
@@ -87,25 +89,26 @@ class NewsPage(private val context: Context) {
             white.typeface = if (selected) bold else Typeface.DEFAULT
             canvas.drawText(name, tx, y + u * 0.51f, white)
             targets += cell to {
-                section = if (name == News.BM) lastBm else News.sections.first { it.name == name }
+                section = lastInGroup[name] ?: News.sections.first { (it.group ?: it.name) == name }
                 null
             }
             tx += tw + u * 0.55f
         }
         y += u * 0.95f
 
-        // Malay papers get a second row.
-        if (section.group == News.BM) {
+        // Groups (Sports, Malay papers) get a second row.
+        val group = section.group
+        if (group != null) {
             var sx = left
-            soft.textSize = u * 0.28f
-            for (s in News.sections.filter { it.group == News.BM }) {
+            for (s in News.sections.filter { it.group == group }) {
+                soft.textSize = u * 0.28f
                 val tw = soft.measureText(s.name)
                 val cell = RectF(sx - u * 0.15f, y, sx + tw + u * 0.15f, y + u * 0.5f)
                 if (s == section) canvas.drawRoundRect(cell, cell.height() / 2, cell.height() / 2, panel)
                 canvas.drawText(s.name, sx, y + u * 0.35f, if (s == section) white.also { it.textSize = u * 0.28f; it.typeface = bold } else soft)
                 targets += cell to {
                     section = s
-                    lastBm = s
+                    lastInGroup[group] = s
                     null
                 }
                 sx += tw + u * 0.5f
@@ -115,9 +118,18 @@ class NewsPage(private val context: Context) {
 
         val tickerH = u * 0.65f
         val bottom = r.bottom - pad - tickerH - u * 0.2f
-        val items = News.get(section)
+        val kind = section.standings
+        val items = if (kind != null) News.get(News.sections.first { it.group == News.SPORTS && it.standings == null }) else News.get(section)
         if (!TripTracker.isParked()) {
             message(canvas, RectF(left, y, right, bottom), u, "The news page opens when you're parked.")
+        } else if (kind != null) {
+            val tables = com.alzadash.core.Standings.get(kind)
+            val area = RectF(left, y + u * 0.15f, right, bottom)
+            when {
+                tables == null -> message(canvas, area, u, "Loading ${section.name} standings…")
+                tables.isEmpty() -> message(canvas, area, u, "Standings aren't available right now. Check the phone's internet.")
+                else -> drawTables(canvas, tables, area, u)
+            }
         } else if (items == null) {
             message(canvas, RectF(left, y, right, bottom), u, "Loading ${section.name}…")
         } else if (items.isEmpty()) {
@@ -170,6 +182,90 @@ class NewsPage(private val context: Context) {
             val c = RectF(row.left + i * (cw + gap), row.top, row.left + i * (cw + gap) + cw, row.bottom)
             drawCard(canvas, item, c, u)
         }
+    }
+
+    /**
+     * Standings tables side by side. A long table (football's 20 teams) is split into two
+     * halves so every row stays readable without scrolling.
+     */
+    private fun drawTables(canvas: Canvas, tables: List<com.alzadash.core.Table>, r: RectF, u: Float) {
+        val panes = mutableListOf<Pair<com.alzadash.core.Table, IntRange>>()
+        val maxRows = ((r.height() - u * 0.9f) / (u * 0.36f)).toInt().coerceAtLeast(6)
+        for (t in tables) {
+            if (tables.size == 1 && t.rows.size > maxRows) {
+                val half = (t.rows.size + 1) / 2
+                panes += t to (0 until half)
+                panes += t to (half until t.rows.size)
+            } else {
+                panes += t to (0 until min(t.rows.size, maxRows))
+            }
+        }
+        val gap = u * 0.3f
+        val weights = panes.map { (t, _) -> if (t.columns.size >= 5) 1.25f else 1f }
+        var x = r.left
+        val total = weights.sum()
+        val rows = panes.maxOf { it.second.count() }
+        val rowH = min(u * 0.48f, (r.height() - u * 0.9f) / rows.coerceAtLeast(1))
+        panes.forEachIndexed { i, (t, range) ->
+            val w = (r.width() - gap * (panes.size - 1)) * weights[i] / total
+            val box = RectF(x, r.top, x + w, r.bottom)
+            canvas.drawRoundRect(box, u * 0.2f, u * 0.2f, panel)
+            drawTable(canvas, t, range, box, u, rowH)
+            x += w + gap
+        }
+    }
+
+    private fun drawTable(canvas: Canvas, t: com.alzadash.core.Table, range: IntRange, box: RectF, u: Float, rowH: Float) {
+        val pad = u * 0.25f
+        val left = box.left + pad
+        val right = box.right - pad
+        soft.textSize = u * 0.22f
+        canvas.drawText(t.title + if (range.first > 0) " (cont.)" else "", left, box.top + u * 0.4f, soft)
+        // Column x positions: position, a wide name column, then numbers from the right.
+        val numW = u * 0.62f
+        val numbers = t.columns.size - 2
+        val extraText = t.columns.size == 5 && t.columns[2].none { it.isDigit() } && t.columns[2].length > 2
+        val numStart = right - numW * (if (extraText) numbers - 1 else numbers)
+        val textCols = if (extraText) 2 else 1
+        val nameLeft = left + u * 0.55f
+        val nameW = (numStart - nameLeft) / textCols
+        fun colX(c: Int) = when {
+            c == 0 -> left
+            c <= textCols -> nameLeft + (c - 1) * nameW
+            else -> numStart + (c - textCols - 1) * numW
+        }
+        var y = box.top + u * 0.8f
+        soft.textSize = u * 0.2f
+        t.columns.forEachIndexed { c, name ->
+            if (c > textCols) canvas.drawText(name, colX(c) + numW - soft.measureText(name), y, soft)
+            else canvas.drawText(name, colX(c), y, soft)
+        }
+        val textSize = min(u * 0.3f, rowH * 0.62f)
+        for (i in range) {
+            val row = t.rows[i]
+            y += rowH
+            if (i % 2 == 0) {
+                val stripe = Paint().apply { color = Color.argb(30, 255, 255, 255) }
+                canvas.drawRect(box.left + u * 0.1f, y - rowH * 0.72f, box.right - u * 0.1f, y + rowH * 0.28f, stripe)
+            }
+            row.forEachIndexed { c, v ->
+                val p = if (c == 1 || c == row.size - 1) white else soft
+                p.textSize = textSize
+                p.typeface = if (c == row.size - 1 || (c == 0 && i < 3)) bold else Typeface.DEFAULT
+                when {
+                    c > textCols -> canvas.drawText(v, colX(c) + numW - p.measureText(v), y, p)
+                    c == 0 -> {
+                        if (i < 3) {
+                            val medal = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor(listOf("#E5B83E", "#B8C2CC", "#C9824A")[i]) }
+                            canvas.drawCircle(left + textSize * 0.55f, y - textSize * 0.35f, textSize * 0.68f, medal)
+                        }
+                        canvas.drawText(v, left + textSize * 0.55f - p.measureText(v) / 2, y, p)
+                    }
+                    else -> canvas.drawText(wrap(v, p, nameW - u * 0.15f, 1).firstOrNull() ?: "", colX(c), y, p)
+                }
+            }
+        }
+        soft.typeface = Typeface.DEFAULT
     }
 
     private fun drawHero(canvas: Canvas, item: NewsItem, r: RectF, u: Float) {
