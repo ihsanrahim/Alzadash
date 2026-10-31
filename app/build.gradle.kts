@@ -25,7 +25,8 @@ android {
                 storeFile = file(keystorePath)
                 storePassword = System.getenv("SIGNING_STORE_PASSWORD")
                 keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+                // A PKCS12 keystore uses one password for the store and the key.
+                keyPassword = System.getenv("SIGNING_STORE_PASSWORD")
             }
         }
     }
