@@ -72,9 +72,26 @@ class DashboardView(context: Context) : View(context) {
         return true
     }
 
+    /**
+     * When set, the dashboard is drawn as a narrow column inside this area (the map sits
+     * beside it) and the shortcut bar is left out.
+     */
+    var panel: RectF? = null
+        set(value) {
+            field = value
+            invalidate()
+        }
+
     override fun onDraw(canvas: Canvas) {
         canvas.drawColor(BG)
         Background.get(context)?.let { drawCover(canvas, it) }
+        val (lat, lng) = TripTracker.position(context)
+        Weather.refreshIfStale(lat, lng)
+        panel?.let {
+            dockRects.clear()
+            drawColumn(canvas, it, lat, lng)
+            return
+        }
         val a = if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea
         val u = min(a.height() / 10f, a.width() / 17f) // one layout unit
         val pad = u * 0.5f
@@ -83,18 +100,64 @@ class DashboardView(context: Context) : View(context) {
         val dockW = u * 1.9f
         val left = a.left + pad
         val right = a.right - pad - dockW - pad
-        val (lat, lng) = TripTracker.position(context)
-        Weather.refreshIfStale(lat, lng)
+        val colL = left + (right - left) * 0.5f
 
         drawDock(canvas, a.right - pad - dockW, top, a.right - pad, bottom, u)
 
         // Left column: time, dates, speed and trip.
+        drawClock(canvas, left, top, colL - left - u * 0.4f, u * 2.3f, u)
+
+        val speedY = top + u * 5.9f
+        drawSpeed(canvas, left, speedY, u * 1.6f, u)
+        dim.textSize = u * 0.45f
+        val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
+            TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
+        canvas.drawText(trip, left, speedY + u * 0.8f, dim)
+
+        // Right column: prayer card and weather card.
+        val prayerRect = RectF(colL, top, right, top + u * 2.0f)
+        canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
+        drawPrayer(canvas, prayerRect, lat, lng, u, 3)
+
+        val wRect = RectF(colL, prayerRect.bottom + u * 0.3f, right, prayerRect.bottom + u * 2.3f)
+        canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
+        drawWeather(canvas, wRect, u)
+
+        drawNowPlaying(canvas, RectF(left, bottom - u * 1.6f, right, bottom), u)
+    }
+
+    /** The narrow layout used beside the map: everything stacked in one column. */
+    private fun drawColumn(canvas: Canvas, r: RectF, lat: Double, lng: Double) {
+        val u = min(r.height() / 12.6f, r.width() / 7.5f)
+        val pad = u * 0.4f
+        val left = r.left + pad
+        val right = r.right - pad
+        var y = r.top + pad
+        drawClock(canvas, left, y - u * 0.5f, right - left, u * 1.8f, u)
+        y += u * 3.4f
+        drawSpeed(canvas, left, y + u * 0.9f, u * 1.1f, u)
+        y += u * 1.4f
+        val prayerRect = RectF(left, y, right, y + u * 2.5f)
+        canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
+        drawPrayer(canvas, prayerRect, lat, lng, u, 2)
+        y = prayerRect.bottom + u * 0.3f
+        val wRect = RectF(left, y, right, y + u * 2.0f)
+        canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
+        drawWeather(canvas, wRect, u)
+        drawNowPlaying(canvas, RectF(left, r.bottom - pad - u * 1.6f, right, r.bottom - pad), u)
+    }
+
+    /** Time, then the date and Hijri date. The time shrinks to fit [maxW] so it never runs into the cards. */
+    private fun drawClock(canvas: Canvas, left: Float, top: Float, maxW: Float, size: Float, u: Float) {
         val now = Date()
+        val time = DateFormat.getTimeFormat(context).format(now)
         text.typeface = light
-        text.textSize = u * 2.3f
-        canvas.drawText(DateFormat.getTimeFormat(context).format(now), left, top + u * 2.0f, text)
+        text.textSize = size
+        val w = text.measureText(time)
+        if (w > maxW) text.textSize = size * maxW / w
+        canvas.drawText(time, left, top + u * 2.0f, text)
         dim.textSize = u * 0.55f
-        canvas.drawText(DateFormat.format("EEEE, d MMMM yyyy", now).toString(), left, top + u * 2.9f, dim)
+        canvas.drawText(ellipsize(DateFormat.format("EEEE, d MMMM yyyy", now).toString(), dim, maxW), left, top + u * 2.9f, dim)
         val day = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
         if (day != hijriDay) {
             hijri = try { Hijri.today() } catch (_: Exception) { "" }
@@ -102,33 +165,20 @@ class DashboardView(context: Context) : View(context) {
         }
         warm.textSize = u * 0.55f
         canvas.drawText(hijri, left, top + u * 3.7f, warm)
+    }
 
+    private fun drawSpeed(canvas: Canvas, left: Float, baseline: Float, size: Float, u: Float) {
         val speed = TripTracker.speedKmh()
         text.typeface = bold
-        text.textSize = u * 1.6f
+        text.textSize = size
         val speedText = speed?.let { String.format(Locale.US, "%.0f", it) } ?: "--"
-        val speedY = top + u * 5.9f
-        canvas.drawText(speedText, left, speedY, text)
+        canvas.drawText(speedText, left, baseline, text)
         accent.textSize = u * 0.5f
-        val sx = left + text.measureText(speedText) + u * 0.25f
-        canvas.drawText("km/h", sx, speedY, accent)
-        dim.textSize = u * 0.45f
-        val trip = String.format(Locale.US, "Trip %.1f km  ·  %s  ·  avg %.0f km/h",
-            TripTracker.tripMeters / 1000, duration(System.currentTimeMillis() - TripTracker.tripStartMs), TripTracker.avgKmh())
-        canvas.drawText(trip, left, speedY + u * 0.8f, dim)
+        canvas.drawText("km/h", left + text.measureText(speedText) + u * 0.25f, baseline, accent)
+    }
 
-        // Right column: prayer card and weather card.
-        val colL = left + (right - left) * 0.5f
-        val prayerRect = RectF(colL, top, right, top + u * 2.0f)
-        canvas.drawRoundRect(prayerRect, u * 0.4f, u * 0.4f, card)
-        drawPrayer(canvas, prayerRect, lat, lng, u)
-
-        val wRect = RectF(colL, prayerRect.bottom + u * 0.3f, right, prayerRect.bottom + u * 2.3f)
-        canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
-        drawWeather(canvas, wRect, u)
-
-        // Bottom: what's playing.
-        val npRect = RectF(left, bottom - u * 1.6f, right, bottom)
+    /** What's playing, with ◀ ▶ to change radio station. */
+    private fun drawNowPlaying(canvas: Canvas, npRect: RectF, u: Float) {
         canvas.drawRoundRect(npRect, u * 0.4f, u * 0.4f, card)
         val station = Radio.current
         val track = NowPlaying.read(context)
@@ -137,7 +187,6 @@ class DashboardView(context: Context) : View(context) {
             station != null -> "RADIO" to station.name
             else -> "INSTANT RADIO" to "Tap the radio button to pick a station"
         }
-        // ◀ ▶ change radio station.
         val btn = npRect.height() * 0.7f
         val by = npRect.centerY()
         nextRect.set(npRect.right - u * 0.4f - btn, by - btn / 2, npRect.right - u * 0.4f, by + btn / 2)
@@ -152,8 +201,8 @@ class DashboardView(context: Context) : View(context) {
         canvas.drawText(ellipsize(line, text, maxW), npRect.left + u * 0.5f, npRect.top + u * 1.3f, text)
     }
 
-    /** Compact solat card: next prayer and countdown on one line, today's times underneath. */
-    private fun drawPrayer(canvas: Canvas, r: RectF, lat: Double, lng: Double, u: Float) {
+    /** Compact solat card: next prayer and countdown on one line, today's times underneath in [cols] columns. */
+    private fun drawPrayer(canvas: Canvas, r: RectF, lat: Double, lng: Double, u: Float, cols: Int) {
         val now = System.currentTimeMillis()
         val next = Prayer.next(lat, lng, now)
         val fmt = DateFormat.getTimeFormat(context)
@@ -168,13 +217,12 @@ class DashboardView(context: Context) : View(context) {
             String.format(Locale.US, "−%d:%02d:%02d", left / 3600, left / 60 % 60, left % 60),
             x + text.measureText(head) + u * 0.35f, r.top + u * 0.75f, warm,
         )
-        // Today's timetable in two rows of three.
         val times = Prayer.forDay(lat, lng, Calendar.getInstance())
-        val colW = (r.width() - u * 0.8f) / 3
+        val colW = (r.width() - u * 0.8f) / cols
         times.forEachIndexed { i, p ->
             val paint = if (p.name == next.name) warm else dim
             paint.textSize = u * 0.28f
-            canvas.drawText("${p.name} ${fmt.format(Date(p.atMillis))}", x + (i % 3) * colW, r.top + u * 1.25f + (i / 3) * u * 0.42f, paint)
+            canvas.drawText("${p.name} ${fmt.format(Date(p.atMillis))}", x + (i % cols) * colW, r.top + u * 1.25f + (i / cols) * u * 0.42f, paint)
         }
     }
 

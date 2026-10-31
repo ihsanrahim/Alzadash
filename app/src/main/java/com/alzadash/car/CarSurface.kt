@@ -1,6 +1,7 @@
 package com.alzadash.car
 
 import android.graphics.Rect
+import android.view.Surface
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.os.Handler
@@ -10,12 +11,17 @@ import androidx.car.app.AppManager
 import androidx.car.app.CarContext
 import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
+import com.alzadash.core.Input
+import com.alzadash.core.Pkg
 import com.alzadash.core.Shell
 import com.alzadash.core.TripTracker
 import java.lang.ref.WeakReference
 
-/** DASH: the dashboard. WEB: the built-in browser. APP: a real phone app opened on the car screen. */
-enum class Mode { DASH, WEB, APP }
+/**
+ * DASH: the dashboard. WEB: the built-in browser. APP: a real phone app opened on the car screen.
+ * SPLIT: Waze or Google Maps beside a narrow dashboard.
+ */
+enum class Mode { DASH, WEB, APP, SPLIT }
 
 /**
  * Owns the car screen. It is a virtual display that shows [DashPresentation], and with Shizuku
@@ -32,6 +38,10 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     private var visible = Rect()
     private var width = 0
     private var height = 0
+    private var dpi = 160
+    /** Second screen that the map app runs on in [Mode.SPLIT]. Kept while connected so Waze keeps its route. */
+    private var mapDisplay: VirtualDisplay? = null
+    private var mapLaunched = false
     /** True while one of our cover activities sits on top of an app on the car screen. */
     private var coverOnTop = false
     private var blocking = false
@@ -50,6 +60,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         override fun run() {
             // Picks up location permission granted after the car connected.
             TripTracker.start(carContext)
+            Input.connect(carContext)
             checkGate()
             handler.postDelayed(this, 500)
         }
@@ -68,6 +79,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         release(keepGate = true)
         width = container.width
         height = container.height
+        dpi = container.dpi
         val dm = carContext.getSystemService(DisplayManager::class.java)
         val vd = dm.createVirtualDisplay("AlzaDash", width, height, container.dpi, surface, 0)
         display = vd
@@ -84,19 +96,41 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         visible = Rect(visibleArea)
         presentation?.setVisibleArea(visible)
+        SplitActivity.relayout()
     }
 
     override fun onStableAreaChanged(stableArea: Rect) {}
 
     override fun onSurfaceDestroyed(container: SurfaceContainer) = release(keepGate = true)
 
+    /** The map's area and the dashboard column's area on the car screen, in [Mode.SPLIT]. */
+    fun splitAreas(): Pair<Rect, Rect> {
+        val a = if (visible.isEmpty) Rect(0, 0, width, height) else visible
+        val split = a.left + (a.width() * 0.6f).toInt()
+        return Rect(a.left, a.top, split, a.bottom) to Rect(split, a.top, a.right, a.bottom)
+    }
+
     override fun onClick(x: Float, y: Float) {
         val id = displayId
+        if (mode == Mode.SPLIT) {
+            val m = splitAreas().first
+            val mapId = mapDisplay?.display?.displayId
+            if (m.contains(x.toInt(), y.toInt()) && mapId != null) Shell.tap(mapId, x - m.left, y - m.top)
+            else if (id >= 0) Shell.tap(id, x, y)
+            return
+        }
         if ((mode == Mode.APP || coverOnTop) && id >= 0) Shell.tap(id, x, y) else presentation?.tap(x, y)
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
         val id = displayId
+        if (mode == Mode.SPLIT) {
+            val m = splitAreas().first
+            val mapId = mapDisplay?.display?.displayId ?: return
+            Input.drag(mapId, m.width(), m.height(), distanceX, distanceY)
+            return
+        }
+        if (mode == Mode.APP && !coverOnTop && id >= 0 && Input.drag(id, width, height, distanceX, distanceY)) return
         if (mode == Mode.APP && !coverOnTop && id >= 0) {
             val cx = width / 2f
             val cy = height / 2f
@@ -107,7 +141,14 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     fun setMode(m: Mode) {
-        if (m == Mode.APP) return
+        if (m == Mode.APP || m == Mode.SPLIT) return
+        if (mode == Mode.SPLIT) {
+            SplitActivity.close()
+            mode = m
+            if (wake.isHeld) wake.release()
+            presentation?.setMode(m)
+            return
+        }
         val fromApp = mode == Mode.APP || coverOnTop
         mode = m
         if (wake.isHeld) wake.release()
@@ -130,10 +171,48 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         presentation?.openUrl(url)
     }
 
+    /** Opens Waze (or Google Maps) on the left with the dashboard beside it. Returns false if neither is installed. */
+    fun openSplit(): Boolean {
+        val id = displayId
+        if (id < 0) return false
+        val pm = carContext.packageManager
+        val launch = listOf(Pkg.WAZE, Pkg.MAPS).firstNotNullOfOrNull { pm.getLaunchIntentForPackage(it)?.component }
+            ?: return false
+        mapComponent = launch.flattenToString()
+        mode = Mode.SPLIT
+        wake.acquire(4 * 60 * 60_000L)
+        Shell.startOnDisplay(id, "${carContext.packageName}/${SplitActivity::class.java.name}")
+        return true
+    }
+
+    private var mapComponent = ""
+
+    /** The map area on [SplitActivity] is ready: show the map's screen there, starting the map app the first time. */
+    fun onMapSurface(surface: Surface, w: Int, h: Int) {
+        val vd = mapDisplay
+        if (vd == null) {
+            val dm = carContext.getSystemService(DisplayManager::class.java)
+            mapDisplay = dm.createVirtualDisplay("AlzaDash map", w, h, dpi, surface, 0)
+        } else {
+            vd.resize(w, h, dpi)
+            vd.surface = surface
+        }
+        val id = mapDisplay?.display?.displayId ?: return
+        if (!mapLaunched && mapComponent.isNotEmpty()) {
+            mapLaunched = true
+            Shell.startOnDisplay(id, mapComponent)
+        }
+    }
+
+    fun onMapSurfaceGone() {
+        mapDisplay?.surface = null
+    }
+
     /** Opens a real app on the car screen through Shizuku. */
     fun openApp(component: String) {
         val id = displayId
         if (id < 0) return
+        if (mode == Mode.SPLIT) SplitActivity.close()
         mode = Mode.APP
         coverOnTop = false
         blocking = false
@@ -152,7 +231,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
 
     /** Types into whatever field is selected in the app on the car screen. */
     fun typeText(words: String) {
-        if (displayId >= 0) Shell.typeText(displayId, words)
+        val target = if (mode == Mode.SPLIT) mapDisplay?.display?.displayId ?: -1 else displayId
+        if (target >= 0) Shell.typeText(target, words)
     }
 
     /** Covers an app with our own screen while moving, and uncovers it once parked again. */
@@ -188,8 +268,13 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         if (!keepGate) handler.removeCallbacks(gate)
         if (wake.isHeld) wake.release()
         CoverActivity.finishAll()
+        SplitActivity.close()
+        if (mode == Mode.SPLIT) mode = Mode.DASH
         coverOnTop = false
         blocking = false
+        mapDisplay?.release()
+        mapDisplay = null
+        mapLaunched = false
         presentation?.dismiss()
         presentation = null
         display?.release()

@@ -11,8 +11,8 @@ android {
         applicationId = "com.alzadash"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "3.0"
+        versionCode = 4
+        versionName = "4.0"
     }
 
     // Release signing comes from GitHub Actions secrets (see README). Without them the
@@ -35,6 +35,10 @@ android {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
+    }
+
+    buildFeatures {
+        aidl = true
     }
 
     compileOptions {

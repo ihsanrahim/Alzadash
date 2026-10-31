@@ -35,7 +35,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             Mode.DASH -> {
                 strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
                 strip.addAction(icon(R.drawable.ic_radio) { screenManager.push(RadioScreen(carContext)) })
-                strip.addAction(icon(R.drawable.ic_nav) { screenManager.push(GoScreen(carContext, this)) })
+                strip.addAction(icon(R.drawable.ic_nav) { openMap() })
                 strip.addAction(icon(R.drawable.ic_video) { screenManager.push(SitesScreen(carContext, surface) { invalidate() }) })
             }
             Mode.WEB -> {
@@ -44,6 +44,12 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
                 }.build())
                 strip.addAction(icon(R.drawable.ic_back) { surface.goBack() })
                 strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
+            }
+            Mode.SPLIT -> {
+                strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
+                strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
+                strip.addAction(icon(R.drawable.ic_keyboard) { dictate() })
+                strip.addAction(icon(R.drawable.ic_radio) { screenManager.push(RadioScreen(carContext)) })
             }
             Mode.APP -> {
                 strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
@@ -60,6 +66,18 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, res)).build())
             .setOnClickListener { onClick() }
             .build()
+
+    /**
+     * Waze on the left with the dashboard beside it. Without Shizuku this falls back to the
+     * old destination list, which hands over to Waze or Maps full screen.
+     */
+    private fun openMap() {
+        when {
+            !Shell.available() -> screenManager.push(GoScreen(carContext, this))
+            !surface.openSplit() -> say("Install Waze or Google Maps on your phone")
+            else -> invalidate()
+        }
+    }
 
     /** A shortcut in the right-hand bar was tapped: open that app on the car screen. */
     fun openDock(app: DockApp) {

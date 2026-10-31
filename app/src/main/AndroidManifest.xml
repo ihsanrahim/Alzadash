@@ -71,6 +71,13 @@
             android:resizeableActivity="true"
             android:taskAffinity="com.alzadash.cover"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
+        <activity
+            android:name=".car.SplitActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="true"
+            android:taskAffinity="com.alzadash.split"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
         <activity android:name=".phone.StationsActivity" android:label="@string/stations" />
         <activity android:name=".phone.DockPickerActivity" android:label="Car shortcuts" />
 

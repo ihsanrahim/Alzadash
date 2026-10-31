@@ -13,6 +13,7 @@ object Dock {
 
     /** Default picks by app name (so patched apps like ReVanced and Morphe are found), with words to skip. */
     private val defaults = listOf(
+        "quran" to null,
         "youtube" to "music",
         "reezn" to null,
         "spotify" to null,
@@ -32,11 +33,25 @@ object Dock {
 
     fun load(context: Context): List<DockApp> {
         val all = launchable(context)
-        Prefs(context).dockPackages?.let { saved ->
-            return saved.mapNotNull { p -> all.firstOrNull { it.pkg == p } }
+        val prefs = Prefs(context)
+        prefs.dockPackages?.let { saved ->
+            var list = saved
+            // Shortcuts picked before the Quran app was added to the defaults: put it on top once.
+            if (!prefs.quranOffered) {
+                prefs.quranOffered = true
+                quran(all)?.takeIf { it.pkg !in saved }?.let {
+                    list = (listOf(it.pkg) + saved).take(MAX)
+                    prefs.dockPackages = list
+                }
+            }
+            return list.mapNotNull { p -> all.firstOrNull { it.pkg == p } }
         }
         val picked = mutableListOf<DockApp>()
         for ((name, skip) in defaults) {
+            if (name == "quran") {
+                quran(all)?.let { picked += it }
+                continue
+            }
             if (name == "yt music" && picked.any { it.label.lowercase().contains("music") }) continue
             all.filter { a ->
                 val l = a.label.lowercase()
@@ -48,6 +63,10 @@ object Dock {
         }
         return picked
     }
+
+    /** A Quran app such as Al Quran (Tafsir & by Word). */
+    private fun quran(all: List<DockApp>): DockApp? =
+        all.firstOrNull { "quran" in it.label.lowercase() || "qur'an" in it.label.lowercase() || "quran" in it.pkg }
 
     fun icon(context: Context, app: DockApp): Drawable? =
         try { context.packageManager.getApplicationIcon(app.pkg) } catch (_: Exception) { null }

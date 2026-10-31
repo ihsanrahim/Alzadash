@@ -41,8 +41,9 @@ object Shell {
         }
     }
 
-    fun tap(display: Int, x: Float, y: Float) =
-        run("input", "-d", "$display", "tap", "${x.toInt()}", "${y.toInt()}")
+    fun tap(display: Int, x: Float, y: Float) {
+        if (!Input.tap(display, x, y)) run("input", "-d", "$display", "tap", "${x.toInt()}", "${y.toInt()}")
+    }
 
     fun swipe(display: Int, x1: Float, y1: Float, x2: Float, y2: Float) =
         run("input", "-d", "$display", "swipe", "${x1.toInt()}", "${y1.toInt()}", "${x2.toInt()}", "${y2.toInt()}", "250")
@@ -53,11 +54,19 @@ object Shell {
         if (safe.isNotEmpty()) run("input", "-d", "$display", "text", safe)
     }
 
-    fun key(display: Int, code: Int) = run("input", "-d", "$display", "keyevent", "$code")
+    fun key(display: Int, code: Int) {
+        if (!Input.key(display, code)) run("input", "-d", "$display", "keyevent", "$code")
+    }
 
-    /** Opens an activity in a new task on the given display. */
-    fun startOnDisplay(display: Int, component: String, extraKey: String? = null, extraValue: String? = null) {
-        val cmd = mutableListOf("am", "start", "--display", "$display", "-f", "0x18000000", "-n", component)
+    /**
+     * Opens an activity on the given display, in a new task, or with [newTask] false
+     * bringing back the app's existing task so it keeps its state.
+     */
+    fun startOnDisplay(
+        display: Int, component: String, extraKey: String? = null, extraValue: String? = null, newTask: Boolean = true,
+    ) {
+        val flags = if (newTask) "0x18000000" else "0x10000000"
+        val cmd = mutableListOf("am", "start", "--display", "$display", "-f", flags, "-n", component)
         if (extraKey != null && extraValue != null) cmd += listOf("--es", extraKey, extraValue)
         run(*cmd.toTypedArray())
     }

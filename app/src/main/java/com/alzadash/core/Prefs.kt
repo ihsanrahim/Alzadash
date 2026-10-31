@@ -68,6 +68,10 @@ class Prefs(context: Context) {
         get() = sp.getString("dock_packages", null)?.split(",")?.filter { it.isNotBlank() }
         set(value) = sp.edit().putString("dock_packages", value?.joinToString(",")).apply()
 
+    var quranOffered: Boolean
+        get() = sp.getBoolean("quran_offered", false)
+        set(value) = sp.edit().putBoolean("quran_offered", value).apply()
+
     var askedPermissions: Boolean
         get() = sp.getBoolean("asked_permissions", false)
         set(value) = sp.edit().putBoolean("asked_permissions", value).apply()
