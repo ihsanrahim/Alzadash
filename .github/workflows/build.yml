@@ -53,7 +53,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log
+          ./gradlew --no-daemon assembleRelease bundleRelease 2>&1 | tee build.log
 
       # Put compile errors on the run's summary page so they can be read without opening the log.
       - name: Show build errors
@@ -66,7 +66,10 @@ jobs:
           [ -n "$wrong" ] && echo "::error::${wrong}" || true
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk AlzaDash.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk AlzaDash.apk
+          # The Play Store bundle is only useful when signed with the real key.
+          if [ -n "$SIGNING_KEYSTORE" ]; then cp app/build/outputs/bundle/release/app-release.aab AlzaDash.aab; fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -78,6 +81,8 @@ jobs:
         with:
           tag_name: latest
           name: AlzaDash (latest build)
-          body: Download AlzaDash.apk below and open it on your phone.
-          files: AlzaDash.apk
+          body: Download AlzaDash.apk below and open it on your phone. AlzaDash.aab is for uploading to Google Play.
+          files: |
+            AlzaDash.apk
+            AlzaDash.aab
           make_latest: true
