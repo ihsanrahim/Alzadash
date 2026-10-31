@@ -142,6 +142,10 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             val cx = width / 2f
             val cy = height / 2f
             Shell.swipe(id, cx, cy, cx - distanceX * 3, cy - distanceY * 3)
+        } else if (mode == Mode.WEB && coverOnTop && id >= 0) {
+            if (!Input.drag(id, width, height, distanceX, distanceY)) {
+                Shell.swipe(id, width / 2f, height / 2f, width / 2f - distanceX * 3, height / 2f - distanceY * 3)
+            }
         } else if (mode == Mode.WEB) {
             presentation?.drag(distanceX, distanceY)
         } else {
@@ -177,6 +181,22 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     fun openUrl(url: String) {
+        val id = displayId
+        if (mode == Mode.WEB && CoverActivity.browser != null) {
+            CoverActivity.browser?.load(url)
+            return
+        }
+        if ((mode == Mode.APP || coverOnTop) && id >= 0) {
+            // A phone app is open underneath and would sit above the dashboard's own browser,
+            // so the browser opens in a cover screen on top of it instead.
+            if (mode == Mode.SPLIT) SplitActivity.close()
+            mode = Mode.WEB
+            blocking = false
+            CoverActivity.finishAll()
+            CoverActivity.pendingUrl = url
+            showCover(CoverActivity.WEB)
+            return
+        }
         setMode(Mode.WEB)
         presentation?.openUrl(url)
     }
@@ -233,8 +253,11 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         checkGate()
     }
 
+    /** The built-in browser while it is open, wherever it is shown. */
+    val browser: CarBrowser? get() = CoverActivity.browser ?: presentation?.browser
+
     fun goBack() {
-        if (mode == Mode.APP) Shell.key(displayId, 4) else presentation?.goBack()
+        if (mode == Mode.APP) Shell.key(displayId, 4) else browser?.goBack()
     }
 
     fun playPause() = Shell.key(displayId, 85)

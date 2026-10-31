@@ -15,6 +15,9 @@ interface CommandTarget {
     fun playRadio(station: Station)
     fun stopRadio()
     fun navigate(query: String, pkg: String?)
+
+    /** Opens a web address or search in the car browser. */
+    fun browse(url: String) {}
     fun showVideo(on: Boolean)
     fun resetTrip()
     fun say(message: String)
@@ -22,7 +25,7 @@ interface CommandTarget {
 
 /** Listens once through the phone's microphone and runs the matching command. */
 object VoiceCommands {
-    const val HELP = "Try: \"play radio\", \"play <station>\", \"stop radio\", \"navigate to KLCC\", \"open Waze\", \"video\", \"dashboard\", \"reset trip\""
+    const val HELP = "Try: \"play radio\", \"play <station>\", \"stop radio\", \"navigate to KLCC\", \"open Waze\", \"search <anything>\", \"video\", \"dashboard\", \"reset trip\""
 
     private var recognizer: SpeechRecognizer? = null
 
@@ -122,6 +125,11 @@ object VoiceCommands {
                     if (home.isEmpty()) target.say("Set your home address in the phone app") else target.navigate(home, null)
                     return
                 }
+                s.startsWith("search ") || s.startsWith("google ") || s.startsWith("browse ") -> {
+                    target.browse(Browser.toUrl(s.substringAfter(' ').removePrefix("for ").trim()))
+                    return
+                }
+                s.contains("browser") || s.contains("internet") -> { target.browse(Browser.HOME); return }
                 s.contains("waze") -> { target.navigate("", Pkg.WAZE); return }
                 s.contains("maps") -> { target.navigate("", Pkg.MAPS); return }
                 s.contains("stop") && (s.contains("radio") || s.contains("music") || s == "stop") -> {

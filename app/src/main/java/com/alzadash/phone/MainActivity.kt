@@ -17,6 +17,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import com.alzadash.car.CarSurface
 import com.alzadash.core.Background
+import com.alzadash.core.Bookmark
+import com.alzadash.core.Browser
 import com.alzadash.core.Chime
 import com.alzadash.core.Launch
 import com.alzadash.core.NowPlaying
@@ -101,6 +103,33 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             bigButton("Enter") { CarSurface.active?.get()?.let { Shell.key(it.displayId, 66) } },
+        ))
+
+        // Typing a long web address is easier on the phone than on the car screen.
+        col.addView(heading("CAR BROWSER"))
+        val urlBox = EditText(this).apply {
+            hint = "Search or web address"
+            textSize = 18f
+            isSingleLine = true
+        }
+        col.addView(urlBox)
+        col.addView(buttonRow(
+            bigButton("Open on car", accent) {
+                val surface = CarSurface.active?.get()
+                if (surface == null) toast("Connect to the car first") else {
+                    surface.openUrl(Browser.toUrl(urlBox.text.toString()))
+                    urlBox.setText("")
+                }
+            },
+            bigButton("Bookmark") {
+                val text = urlBox.text.toString().trim()
+                if (text.isEmpty()) toast("Type a web address first") else {
+                    val url = Browser.toUrl(text)
+                    Browser.addBookmark(this, Bookmark(text.removePrefix("https://").removePrefix("www.").take(30), url))
+                    toast("Added to the car browser's start page")
+                    urlBox.setText("")
+                }
+            },
         ))
 
         col.addView(heading("SETUP"))

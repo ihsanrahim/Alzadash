@@ -44,13 +44,14 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
                 strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
                 strip.addAction(icon(R.drawable.ic_radio) { screenManager.push(RadioScreen(carContext)) })
                 strip.addAction(icon(R.drawable.ic_nav) { openMap() })
-                strip.addAction(icon(R.drawable.ic_video) { screenManager.push(SitesScreen(carContext, surface) { invalidate() }) })
+                strip.addAction(icon(R.drawable.ic_globe) { openBrowser() })
             }
             Mode.WEB -> {
-                strip.addAction(Action.Builder().setTitle("Sites").setOnClickListener {
-                    screenManager.push(SitesScreen(carContext, surface) { invalidate() })
+                strip.addAction(Action.Builder().setTitle("Go").setOnClickListener {
+                    screenManager.push(BrowserGoScreen(carContext, surface))
                 }.build())
                 strip.addAction(icon(R.drawable.ic_back) { surface.goBack() })
+                strip.addAction(icon(R.drawable.ic_menu) { screenManager.push(BrowserMenuScreen(carContext, surface)) })
                 strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
             }
             Mode.SPLIT -> {
@@ -85,6 +86,12 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             !surface.openSplit() -> say("Install Waze or Google Maps on your phone")
             else -> invalidate()
         }
+    }
+
+    /** The built-in browser, opening on its start page of bookmarks. */
+    fun openBrowser() {
+        surface.openUrl(com.alzadash.core.Browser.HOME)
+        invalidate()
     }
 
     /** A shortcut in the right-hand bar was tapped: open that app on the car screen. */
@@ -147,6 +154,11 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             surface.setMode(Mode.DASH)
             invalidate()
         }
+    }
+
+    override fun browse(url: String) {
+        surface.openUrl(url)
+        invalidate()
     }
 
     override fun resetTrip() {

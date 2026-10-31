@@ -1,6 +1,5 @@
 package com.alzadash.car
 
-import android.annotation.SuppressLint
 import android.app.Presentation
 import android.content.Context
 import android.graphics.Color
@@ -15,11 +14,9 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.TextView
+import com.alzadash.core.Browser
 import com.alzadash.core.TripTracker
 
 /**
@@ -31,11 +28,9 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     private lateinit var dash: DashboardView
     private lateinit var videoLayer: FrameLayout
     private lateinit var block: TextView
-    private var web: WebView? = null
-    private var fullscreenView: View? = null
     private var mode = Mode.DASH
     private var visible = Rect()
-    private var lastUrl = YOUTUBE
+    private var lastUrl = Browser.HOME
     private var forcedBlock = false
     var onDock: (DockApp) -> Unit = {}
     var onRadioStep: (Int) -> Unit = {}
@@ -82,8 +77,8 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
 
     override fun onStop() {
         handler.removeCallbacks(tick)
-        web?.destroy()
-        web = null
+        browser?.destroy()
+        browser = null
         super.onStop()
     }
 
@@ -104,55 +99,29 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
         mode = m
         if (!::root.isInitialized) return
         if (m == Mode.WEB) {
-            ensureWeb()
+            if (browser == null) browser = CarBrowser(getContext(), videoLayer, lastUrl)
             videoLayer.visibility = View.VISIBLE
             dash.visibility = View.GONE
         } else {
             videoLayer.visibility = View.GONE
             dash.visibility = View.VISIBLE
-            // Leaving video stops it entirely.
-            web?.loadUrl("about:blank")
-            web?.destroy()
-            web = null
-            fullscreenView = null
-            videoLayer.removeAllViews()
+            // Leaving the browser stops it entirely, video sound included.
+            browser?.destroy()
+            browser = null
         }
         updateVideoGate()
     }
 
+    /** The browser while it is open. */
+    var browser: CarBrowser? = null
+        private set
+
     fun openUrl(url: String) {
         lastUrl = url
-        if (mode != Mode.WEB) setMode(Mode.WEB)
-        web?.loadUrl(url)
+        if (mode != Mode.WEB) setMode(Mode.WEB) else browser?.load(url)
     }
 
-    fun goBack() {
-        val w = web ?: return
-        if (w.canGoBack()) w.goBack()
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun ensureWeb() {
-        if (web != null) return
-        val w = WebView(getContext())
-        w.settings.javaScriptEnabled = true
-        w.settings.domStorageEnabled = true
-        w.settings.mediaPlaybackRequiresUserGesture = false
-        w.webViewClient = WebViewClient()
-        w.webChromeClient = object : WebChromeClient() {
-            override fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
-                fullscreenView = view
-                videoLayer.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-            }
-            override fun onHideCustomView() {
-                fullscreenView?.let { videoLayer.removeView(it) }
-                fullscreenView = null
-            }
-        }
-        videoLayer.addView(w, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
-        web = w
-        w.loadUrl(lastUrl)
-    }
+    fun goBack() = browser?.goBack()
 
     /** Covers everything, used while a real app is open on the car screen and the car is moving. */
     fun setBlocked(on: Boolean) {
@@ -170,9 +139,9 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
             block.visibility = View.GONE
         } else {
             block.text = if (TripTracker.speedKmh() == null && !forcedBlock) {
-                "Waiting for GPS to confirm the car is stopped.\n\nVideo appears once you're parked."
+                "Waiting for GPS to confirm the car is stopped.\n\nThe page appears once you're parked."
             } else {
-                "Video is hidden while driving.\n\nSound keeps playing. The picture comes back when you stop."
+                "The browser is hidden while driving.\n\nSound keeps playing. The page comes back when you stop."
             }
             block.visibility = View.VISIBLE
         }
@@ -207,5 +176,6 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     companion object {
         const val YOUTUBE = "https://m.youtube.com"
         const val NETFLIX = "https://www.netflix.com"
+
     }
 }
