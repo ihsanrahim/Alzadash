@@ -17,6 +17,7 @@ import com.alzadash.core.Feature
 import com.alzadash.core.Features
 import com.alzadash.core.Hijri
 import com.alzadash.core.LyricLine
+import com.alzadash.core.News
 import com.alzadash.core.Lyrics
 import com.alzadash.core.NowPlaying
 import com.alzadash.core.Prayer
@@ -76,6 +77,14 @@ class DashboardView(context: Context) : View(context) {
     /** Called from the lyrics page to open the music app itself on the car screen. */
     var onOpenApp: (String) -> Unit = {}
 
+    /** Called when a news story is tapped, to open it in the car browser. */
+    var onOpenLink: (String) -> Unit = {}
+
+    private val newsPage by lazy { NewsPage(context) }
+    private val newsRect = RectF()
+    private var tickerX = 0f
+    private var tickerFrame = 0L
+
     private var hijri = ""
     private var hijriDay = -1
     private val rowRect = RectF()
@@ -128,6 +137,14 @@ class DashboardView(context: Context) : View(context) {
     }
 
     private fun tap(x: Float, y: Float) {
+        if (newsOpen) {
+            when (val a = newsPage.tap(x, y)) {
+                is NewsPage.Action.Close -> showNews(false)
+                is NewsPage.Action.Open -> onOpenLink(a.url)
+                null -> invalidate()
+            }
+            return
+        }
         if (lyricsOpen) {
             when {
                 closeRect.contains(x, y) -> showLyrics(false)
@@ -140,6 +157,7 @@ class DashboardView(context: Context) : View(context) {
             prevRect.contains(x, y) -> onRadioStep(-1)
             nextRect.contains(x, y) -> onRadioStep(1)
             musicRect.contains(x, y) && track != null -> showLyrics(true)
+            newsRect.contains(x, y) -> showNews(true)
             rowRect.contains(x, y) -> chipRects.firstOrNull { it.first.contains(x, y) }?.let { onStationTap(it.second) }
             else -> dockRects.firstOrNull { it.first.contains(x, y) }?.let { onDockTap(it.second) }
         }
@@ -164,6 +182,12 @@ class DashboardView(context: Context) : View(context) {
         prevRect.setEmpty()
         nextRect.setEmpty()
         musicRect.setEmpty()
+        newsRect.setEmpty()
+        if (newsOpen) {
+            newsPage.draw(canvas, panel ?: RectF(if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea))
+            postInvalidateDelayed(50) // keeps the LATEST strip moving
+            return
+        }
         track = if (on(Feature.LYRICS) || on(Feature.NOW_PLAYING)) NowPlaying.read(context) else null
         if (lyricsOpen) {
             if (track == null) lyricsOpen = false else {
@@ -214,11 +238,56 @@ class DashboardView(context: Context) : View(context) {
             val wRect = RectF(colL, y, right, y + u * 1.75f)
             canvas.drawRoundRect(wRect, u * 0.4f, u * 0.4f, card)
             drawWeather(canvas, wRect, u)
+            y = wRect.bottom + u * 0.3f
         }
+        val newsBottom = top + if (on(Feature.RADIO_ROW)) u * 5.65f else u * 6.6f
+        if (on(Feature.NEWS) && newsBottom - y >= u * 1.0f) drawNewsTicker(canvas, RectF(colL, y, right, newsBottom), u)
 
         // Bottom: station row, then what's playing with the line being sung.
         if (on(Feature.RADIO_ROW)) drawRadioRow(canvas, RectF(left, top + u * 5.95f, right, top + u * 6.75f), u)
         if (on(Feature.NOW_PLAYING)) drawNowPlaying(canvas, RectF(left, bottom - u * 2.0f, right, bottom), u)
+    }
+
+    /**
+     * Headlines in a small card. While parked they scroll along; while driving one headline
+     * shows at a time, changing every 10 seconds. Tap for the full news page.
+     */
+    private fun drawNewsTicker(canvas: Canvas, r: RectF, u: Float) {
+        newsRect.set(r)
+        canvas.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
+        val items = News.ticker()
+        val x = r.left + u * 0.4f
+        accent.textSize = u * 0.3f
+        canvas.drawText("NEWS", x, r.top + u * 0.45f, accent)
+        dim.textSize = u * 0.26f
+        val more = "Tap for all news ›"
+        canvas.drawText(more, r.right - u * 0.4f - dim.measureText(more), r.top + u * 0.45f, dim)
+        text.typeface = Typeface.DEFAULT
+        text.textSize = u * 0.42f
+        val baseline = r.top + u * 1.0f
+        if (items.isEmpty()) {
+            dim.textSize = u * 0.38f
+            canvas.drawText("Loading headlines…", x, baseline, dim)
+            return
+        }
+        canvas.save()
+        canvas.clipRect(x, r.top, r.right - u * 0.3f, r.bottom)
+        if (TripTracker.isParked()) {
+            val line = items.joinToString("   •   ") { it.title }
+            val w = text.measureText(line + "   •   ")
+            val now = System.currentTimeMillis()
+            if (tickerFrame != 0L) tickerX += (now - tickerFrame) * u * 0.0012f
+            tickerFrame = now
+            if (tickerX > w) tickerX -= w
+            canvas.drawText(line, x - tickerX, baseline, text)
+            canvas.drawText(line, x - tickerX + w, baseline, text)
+            postInvalidateDelayed(50)
+        } else {
+            tickerFrame = 0L
+            val item = items[((System.currentTimeMillis() / 10_000) % items.size).toInt()]
+            canvas.drawText(ellipsize(item.title, text, r.right - u * 0.3f - x), x, baseline, text)
+        }
+        canvas.restore()
     }
 
     /** Radio stations side by side, seven at a time; drag sideways to see the rest. */
@@ -593,7 +662,18 @@ class DashboardView(context: Context) : View(context) {
         private var lyricsScroll = 0f
         private var lyricsTouchedAt = 0L
 
+        /** True while the full news page is showing. */
+        var newsOpen = false
+            private set
+
+        fun showNews(open: Boolean) {
+            newsOpen = open
+            if (open) lyricsOpen = false
+            live.keys.toList().forEach { it.postInvalidate() }
+        }
+
         fun showLyrics(open: Boolean) {
+            if (open) newsOpen = false
             lyricsOpen = open
             lyricsTouchedAt = 0L
             live.keys.toList().forEach { it.postInvalidate() }

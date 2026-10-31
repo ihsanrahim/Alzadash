@@ -28,6 +28,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
         surface.onRadioStep = { delta -> Radio.step(carContext, delta) { say(it) } }
         surface.onStation = { st -> Radio.play(carContext, st) { say(it) } }
         surface.onSettings = { screenManager.push(SettingsScreen(carContext)) }
+        surface.onLinkOpened = { invalidate() }
         surface.onOpenApp = { pkg ->
             DashboardView.showLyrics(false)
             val pm = carContext.packageManager

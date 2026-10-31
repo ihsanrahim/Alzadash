@@ -51,6 +51,7 @@ class CoverActivity : Activity() {
                 onStationTap = { st -> CarSurface.active?.get()?.onStation?.invoke(st) }
                 onSettingsTap = { CarSurface.active?.get()?.onSettings?.invoke() }
                 onOpenApp = { pkg -> CarSurface.active?.get()?.onOpenApp?.invoke(pkg) }
+                onOpenLink = { url -> CarSurface.active?.get()?.openLink(url) }
                 val tick = object : Runnable {
                     override fun run() {
                         invalidate()

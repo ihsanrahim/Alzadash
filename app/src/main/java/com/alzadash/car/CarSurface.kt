@@ -95,6 +95,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             it.onStation = { st -> onStation(st) }
             it.onSettings = { onSettings() }
             it.onOpenApp = { pkg -> onOpenApp(pkg) }
+            it.onOpenLink = { url -> openLink(url) }
             it.setMode(if (mode == Mode.APP) Mode.DASH else mode)
         }
         if (mode == Mode.APP) mode = Mode.DASH
@@ -251,6 +252,14 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         wake.acquire(4 * 60 * 60_000L)
         Shell.startOnDisplay(id, component)
         checkGate()
+    }
+
+    /** A news story was tapped: open it in the browser and refresh the car's buttons. */
+    var onLinkOpened: () -> Unit = {}
+
+    fun openLink(url: String) {
+        openUrl(url)
+        onLinkOpened()
     }
 
     /** The built-in browser while it is open, wherever it is shown. */

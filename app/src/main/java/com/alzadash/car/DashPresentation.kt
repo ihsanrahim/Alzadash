@@ -37,6 +37,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     var onStation: (com.alzadash.core.Station) -> Unit = {}
     var onSettings: () -> Unit = {}
     var onOpenApp: (String) -> Unit = {}
+    var onOpenLink: (String) -> Unit = {}
     private val handler = Handler(Looper.getMainLooper())
 
     private val tick = object : Runnable {
@@ -57,6 +58,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
             onStationTap = { st -> onStation(st) }
             onSettingsTap = { onSettings() }
             onOpenApp = { pkg -> this@DashPresentation.onOpenApp(pkg) }
+            onOpenLink = { url -> this@DashPresentation.onOpenLink(url) }
         }
         videoLayer = FrameLayout(ctx).apply { visibility = View.GONE }
         block = TextView(ctx).apply {

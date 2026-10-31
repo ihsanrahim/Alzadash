@@ -26,6 +26,7 @@ class SplitActivity : Activity() {
             onRadioStep = { d -> car?.onRadioStep?.invoke(d) }
             onStationTap = { st -> car?.onStation?.invoke(st) }
             onOpenApp = { pkg -> car?.onOpenApp?.invoke(pkg) }
+            onOpenLink = { url -> car?.openLink(url) }
             val tick = object : Runnable {
                 override fun run() {
                     invalidate()
