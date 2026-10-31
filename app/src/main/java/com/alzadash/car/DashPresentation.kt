@@ -1,0 +1,193 @@
+package com.alzadash.car
+
+import android.annotation.SuppressLint
+import android.app.Presentation
+import android.content.Context
+import android.graphics.Color
+import android.graphics.Rect
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.view.Display
+import android.view.Gravity
+import android.view.InputDevice
+import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.TextView
+import com.alzadash.core.TripTracker
+
+/**
+ * Everything drawn on the car screen: the dashboard, or the video browser.
+ * Video is only visible while [TripTracker.isParked]; while moving it is covered and only audio continues.
+ */
+class DashPresentation(context: Context, display: Display) : Presentation(context, display) {
+    private lateinit var root: FrameLayout
+    private lateinit var dash: DashboardView
+    private lateinit var videoLayer: FrameLayout
+    private lateinit var block: TextView
+    private var web: WebView? = null
+    private var fullscreenView: View? = null
+    private var mode = Mode.DASH
+    private var visible = Rect()
+    private var lastUrl = YOUTUBE
+    private val handler = Handler(Looper.getMainLooper())
+
+    private val tick = object : Runnable {
+        override fun run() {
+            dash.invalidate()
+            updateVideoGate()
+            handler.postDelayed(this, 500)
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val ctx = getContext()
+        root = FrameLayout(ctx).apply { setBackgroundColor(DashboardView.BG) }
+        dash = DashboardView(ctx)
+        videoLayer = FrameLayout(ctx).apply { visibility = View.GONE }
+        block = TextView(ctx).apply {
+            setBackgroundColor(DashboardView.BG)
+            setTextColor(Color.WHITE)
+            textSize = 26f
+            gravity = Gravity.CENTER
+            setPadding(48, 48, 48, 48)
+            isClickable = true // swallows taps so the video can't be used while moving
+            visibility = View.GONE
+        }
+        root.addView(dash, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        root.addView(videoLayer, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        root.addView(block, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        setContentView(root)
+        handler.post(tick)
+    }
+
+    override fun onStop() {
+        handler.removeCallbacks(tick)
+        web?.destroy()
+        web = null
+        super.onStop()
+    }
+
+    fun setVisibleArea(r: Rect) {
+        visible = Rect(r)
+        if (!::root.isInitialized) return
+        dash.visibleArea = visible
+        root.post {
+            if (visible.isEmpty) {
+                videoLayer.setPadding(0, 0, 0, 0)
+            } else {
+                videoLayer.setPadding(visible.left, visible.top, root.width - visible.right, root.height - visible.bottom)
+            }
+        }
+    }
+
+    fun setMode(m: Mode) {
+        mode = m
+        if (!::root.isInitialized) return
+        if (m == Mode.VIDEO) {
+            ensureWeb()
+            videoLayer.visibility = View.VISIBLE
+            dash.visibility = View.GONE
+        } else {
+            videoLayer.visibility = View.GONE
+            dash.visibility = View.VISIBLE
+            // Leaving video stops it entirely.
+            web?.loadUrl("about:blank")
+            web?.destroy()
+            web = null
+            fullscreenView = null
+            videoLayer.removeAllViews()
+        }
+        updateVideoGate()
+    }
+
+    fun openUrl(url: String) {
+        lastUrl = url
+        if (mode != Mode.VIDEO) setMode(Mode.VIDEO)
+        web?.loadUrl(url)
+    }
+
+    fun goBack() {
+        val w = web ?: return
+        if (w.canGoBack()) w.goBack()
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun ensureWeb() {
+        if (web != null) return
+        val w = WebView(getContext())
+        w.settings.javaScriptEnabled = true
+        w.settings.domStorageEnabled = true
+        w.settings.mediaPlaybackRequiresUserGesture = false
+        w.webViewClient = WebViewClient()
+        w.webChromeClient = object : WebChromeClient() {
+            override fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
+                fullscreenView = view
+                videoLayer.addView(view, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            }
+            override fun onHideCustomView() {
+                fullscreenView?.let { videoLayer.removeView(it) }
+                fullscreenView = null
+            }
+        }
+        videoLayer.addView(w, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+        web = w
+        w.loadUrl(lastUrl)
+    }
+
+    /** The safety gate: video shows only when the car is confirmed stopped. */
+    private fun updateVideoGate() {
+        if (mode != Mode.VIDEO) {
+            block.visibility = View.GONE
+            return
+        }
+        if (TripTracker.isParked()) {
+            block.visibility = View.GONE
+        } else {
+            block.text = if (TripTracker.speedKmh() == null) {
+                "Waiting for GPS to confirm the car is stopped.\n\nVideo appears once you're parked."
+            } else {
+                "Video is hidden while driving.\n\nSound keeps playing. The picture comes back when you stop."
+            }
+            block.visibility = View.VISIBLE
+        }
+    }
+
+    fun tap(x: Float, y: Float) {
+        val target = window?.decorView ?: return
+        val t = SystemClock.uptimeMillis()
+        send(target, MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0))
+        send(target, MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, x, y, 0))
+    }
+
+    /** Turns a scroll on the car screen into a finger drag, so web pages scroll naturally. */
+    fun drag(dx: Float, dy: Float) {
+        if (mode != Mode.VIDEO) return
+        val target = window?.decorView ?: return
+        val cx = target.width / 2f
+        val cy = target.height / 2f
+        val t = SystemClock.uptimeMillis()
+        send(target, MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cx, cy, 0))
+        send(target, MotionEvent.obtain(t, t + 20, MotionEvent.ACTION_MOVE, cx - dx / 2, cy - dy / 2, 0))
+        send(target, MotionEvent.obtain(t, t + 40, MotionEvent.ACTION_MOVE, cx - dx, cy - dy, 0))
+        send(target, MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, cx - dx, cy - dy, 0))
+    }
+
+    private fun send(view: View, e: MotionEvent) {
+        e.source = InputDevice.SOURCE_TOUCHSCREEN
+        view.dispatchTouchEvent(e)
+        e.recycle()
+    }
+
+    companion object {
+        const val YOUTUBE = "https://m.youtube.com"
+        const val NETFLIX = "https://www.netflix.com"
+    }
+}
