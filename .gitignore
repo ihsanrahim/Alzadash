@@ -4,3 +4,9 @@ local.properties
 .idea/
 *.iml
 .DS_Store
+
+# Signing keys belong in GitHub Actions secrets, never in the repo
+*.p12
+*.jks
+*.keystore
+SIGNING_*
