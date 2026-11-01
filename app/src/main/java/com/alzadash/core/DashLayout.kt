@@ -14,7 +14,16 @@ enum class Widget(val label: String, val feature: Feature?) {
     RADIO_ROW("Radio row", Feature.RADIO_ROW),
     NOW_PLAYING("Now playing", Feature.NOW_PLAYING),
     DOCK("Shortcuts", Feature.DOCK),
+    CALENDAR("Calendar", null),
+    AIR("Air quality", null),
+    RADAR("Rain radar", null),
+    PLAYER("Music player", null),
+    YOUTUBE("YouTube", null),
+    WEATHER2("Weather (detail)", null),
 }
+
+/** How a widget's text is drawn: [scale] 0.5–2.0, [align] 0 left, 1 centre, 2 right. */
+data class WidgetStyle(val scale: Float = 1f, val align: Int = 0)
 
 /**
  * Where each widget sits on the car screen, as fractions (0 to 1) of the visible area, so the
@@ -33,7 +42,17 @@ object DashLayout {
         Widget.RADIO_ROW to g(0.5f, 6.45f, 14.1f, 7.25f),
         Widget.NOW_PLAYING to g(0.5f, 7.5f, 14.1f, 9.5f),
         Widget.DOCK to g(14.6f, 0.5f, 16.5f, 9.5f),
+        // Newer widgets start hidden; added from the phone editor, they appear here until moved.
+        Widget.CALENDAR to g(7.3f, 2.8f, 11.2f, 4.55f),
+        Widget.AIR to g(11.4f, 0.5f, 14.1f, 4.55f),
+        Widget.RADAR to g(11.4f, 0.5f, 14.1f, 2.5f),
+        Widget.PLAYER to g(0.5f, 6.45f, 9.0f, 9.5f),
+        Widget.YOUTUBE to g(9.2f, 6.45f, 14.1f, 7.9f),
+        Widget.WEATHER2 to g(11.4f, 2.8f, 14.1f, 4.55f),
     )
+
+    /** Hidden until added in the editor. */
+    private val NEW_WIDGETS = setOf(Widget.CALENDAR, Widget.AIR, Widget.RADAR, Widget.PLAYER, Widget.YOUTUBE, Widget.WEATHER2)
 
     private var lastRaw: String? = "unset"
     private var cached: Map<Widget, RectF> = DEFAULTS
@@ -64,7 +83,84 @@ object DashLayout {
         sp(context).edit().putString("dash_layout", o.toString()).apply()
     }
 
-    fun reset(context: Context) = sp(context).edit().remove("dash_layout").apply()
+    fun reset(context: Context) = sp(context).edit().remove("dash_layout").remove("dash_hidden").remove("widget_style").apply()
+
+    // ---- Which widgets are shown ----
+
+    fun hidden(context: Context): Set<Widget> {
+        val raw = sp(context).getString("dash_hidden", null) ?: return NEW_WIDGETS
+        return raw.split(',').mapNotNull { n -> Widget.values().firstOrNull { it.name == n } }.toSet()
+    }
+
+    fun setHidden(context: Context, w: Widget, hide: Boolean) {
+        val set = hidden(context).toMutableSet()
+        if (hide) set += w else set -= w
+        sp(context).edit().putString("dash_hidden", set.joinToString(",") { it.name }).apply()
+        if (!hide && w.feature != null) Features.set(context, w.feature, true)
+    }
+
+    /** Shown on the car: not removed in the editor, and its feature (if any) switched on. */
+    fun shown(context: Context, w: Widget) =
+        w !in hidden(context) && (w.feature == null || Features.on(context, w.feature))
+
+    // ---- Text size and alignment per widget ----
+
+    private var styleRaw: String? = "unset"
+    private var styleCache: Map<Widget, WidgetStyle> = emptyMap()
+
+    fun style(context: Context, w: Widget): WidgetStyle {
+        val raw = sp(context).getString("widget_style", null)
+        if (raw != styleRaw) {
+            styleRaw = raw
+            styleCache = try {
+                val o = JSONObject(raw ?: "{}")
+                Widget.values().mapNotNull { wd ->
+                    o.optJSONObject(wd.name)?.let { wd to WidgetStyle(it.optDouble("scale", 1.0).toFloat(), it.optInt("align", 0)) }
+                }.toMap()
+            } catch (_: Exception) { emptyMap() }
+        }
+        return styleCache[w] ?: WidgetStyle()
+    }
+
+    fun setStyle(context: Context, w: Widget, st: WidgetStyle) {
+        val o = try { JSONObject(sp(context).getString("widget_style", null) ?: "{}") } catch (_: Exception) { JSONObject() }
+        o.put(w.name, JSONObject().put("scale", st.scale.toDouble()).put("align", st.align))
+        sp(context).edit().putString("widget_style", o.toString()).apply()
+    }
+
+    // ---- Saved layouts ----
+
+    fun savedNames(context: Context): List<String> = try {
+        JSONObject(sp(context).getString("saved_layouts", null) ?: "{}").keys().asSequence().toList().sorted()
+    } catch (_: Exception) { emptyList() }
+
+    fun saveAs(context: Context, name: String) {
+        val p = sp(context)
+        val all = try { JSONObject(p.getString("saved_layouts", null) ?: "{}") } catch (_: Exception) { JSONObject() }
+        all.put(name, JSONObject()
+            .put("layout", p.getString("dash_layout", null) ?: "")
+            .put("hidden", p.getString("dash_hidden", null) ?: hidden(context).joinToString(",") { it.name })
+            .put("style", p.getString("widget_style", null) ?: ""))
+        p.edit().putString("saved_layouts", all.toString()).apply()
+    }
+
+    fun load(context: Context, name: String) {
+        val p = sp(context)
+        val one = try { JSONObject(p.getString("saved_layouts", null) ?: "{}").optJSONObject(name) } catch (_: Exception) { null } ?: return
+        val e = p.edit()
+        fun put(key: String, v: String) { if (v.isEmpty()) e.remove(key) else e.putString(key, v) }
+        put("dash_layout", one.optString("layout"))
+        e.putString("dash_hidden", one.optString("hidden"))
+        put("widget_style", one.optString("style"))
+        e.apply()
+    }
+
+    fun deleteSaved(context: Context, name: String) {
+        val p = sp(context)
+        val all = try { JSONObject(p.getString("saved_layouts", null) ?: "{}") } catch (_: Exception) { return }
+        all.remove(name)
+        p.edit().putString("saved_layouts", all.toString()).apply()
+    }
 
     /** Widest-to-tallest shape of the car screen's usable area, remembered so the phone editor matches it. */
     fun carAspect(context: Context): Float = sp(context).getFloat("car_aspect", 1.75f)

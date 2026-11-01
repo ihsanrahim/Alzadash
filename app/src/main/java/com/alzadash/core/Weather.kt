@@ -5,7 +5,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
 
-data class WeatherNow(val tempC: Double, val code: Int, val highC: Double, val lowC: Double) {
+data class WeatherNow(
+    val tempC: Double, val code: Int, val highC: Double, val lowC: Double,
+    val feelsC: Double = Double.NaN, val uv: Double = Double.NaN,
+    val humidity: Double = Double.NaN, val windKmh: Double = Double.NaN,
+) {
     val label: String
         get() = when (code) {
             0 -> "Clear"
@@ -49,7 +53,7 @@ object Weather {
             try {
                 val url = URL(
                     "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lng" +
-                        "&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min" +
+                        "&current=temperature_2m,weather_code,apparent_temperature,relative_humidity_2m,wind_speed_10m,uv_index&daily=temperature_2m_max,temperature_2m_min" +
                         "&timezone=auto&forecast_days=1"
                 )
                 val conn = url.openConnection() as HttpURLConnection
@@ -63,7 +67,12 @@ object Weather {
                     cur.getInt("weather_code"),
                     daily.getJSONArray("temperature_2m_max").getDouble(0),
                     daily.getJSONArray("temperature_2m_min").getDouble(0),
+                    cur.optDouble("apparent_temperature"),
+                    cur.optDouble("uv_index"),
+                    cur.optDouble("relative_humidity_2m"),
+                    cur.optDouble("wind_speed_10m"),
                 )
+                AirQuality.fetch(lat, lng)
             } catch (_: Exception) {
             } finally {
                 busy = false

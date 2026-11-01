@@ -42,6 +42,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     var onQuick: (String) -> Unit = {}
     /** Short spoken/toast message for the driver. */
     var onMessage: (String) -> Unit = {}
+    var onYouTube: (String) -> Unit = {}
     var onOpenApp: (String) -> Unit = {}
     private var display: VirtualDisplay? = null
     private var presentation: DashPresentation? = null
@@ -102,6 +103,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             it.onStation = { st -> onStation(st) }
             it.onSettings = { onSettings() }
             it.onQuick = { k -> onQuick(k) }
+            it.onYouTube = { k -> onYouTube(k) }
             it.onOpenApp = { pkg -> onOpenApp(pkg) }
             it.onOpenLink = { url -> openLink(url) }
             it.setMode(if (mode == Mode.APP) Mode.DASH else mode)
@@ -260,7 +262,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     /** Opens a real app on the car screen through Shizuku. */
-    fun openApp(component: String) {
+    /** Opens an app on the car screen through Shizuku; with [uri], that page inside the app. */
+    fun openApp(component: String, uri: String? = null) {
         val id = displayId
         if (id < 0) return
         leaveMirror()
@@ -277,7 +280,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         val pkg = component.substringBefore('/')
         val main = android.os.Handler(android.os.Looper.getMainLooper())
         Input.moveTask(pkg, id) {
-            Shell.startOnDisplay(id, component)
+            if (uri != null) Shell.viewOnDisplay(id, uri, pkg) else Shell.startOnDisplay(id, component)
             main.postDelayed({
                 Input.moveTask(pkg, id) {
                     // A window moved in may land on top of the "hidden while driving" cover; put the cover back on top.

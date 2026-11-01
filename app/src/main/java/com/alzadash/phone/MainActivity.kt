@@ -71,6 +71,18 @@ class MainActivity : AppCompatActivity() {
                 smallButton("Shortcuts") { startActivity(Intent(this, DockPickerActivity::class.java)) },
                 smallButton("Background") { chooseBackground() },
             ))
+            // Car settings: welcome tone, size of the car screen's buttons, card beside the map.
+            it.addView(buttonRow(
+                smallButton("Welcome sound") { pick("Welcome sound", com.alzadash.core.Look.TONES, com.alzadash.core.Look.tone(this)) { v ->
+                    com.alzadash.core.Look.setTone(this, v); Chime.play(v) } },
+                smallButton("Button size") {
+                    val sizes = listOf("70%", "85%", "100%", "120%", "150%")
+                    val cur = "${(com.alzadash.core.Look.buttonScale(this) * 100).toInt()}%"
+                    pick("Car button size", sizes, cur) { v -> com.alzadash.core.Look.setButtonScale(this, v.removeSuffix("%").toFloat() / 100f) }
+                },
+                smallButton("Map card") { pick("Card next to the map", com.alzadash.core.Look.SPLIT_CARDS, com.alzadash.core.Look.splitCard(this)) { v ->
+                    com.alzadash.core.Look.setSplitCard(this, v) } },
+            ))
         }
 
         // One box for everything typed for the car: text for the app on screen, or a web address.
@@ -172,7 +184,7 @@ class MainActivity : AppCompatActivity() {
             ))
             it.addView(buttonRow(
                 smallButton("Radio stations") { startActivity(Intent(this, StationsActivity::class.java)) },
-                smallButton("Test sound") { Chime.play() },
+                smallButton("Test sound") { Chime.play(com.alzadash.core.Look.tone(this)) },
             ))
             it.addView(textField("Car Bluetooth name (blank = any)", prefs.carBluetoothName) { v -> prefs.carBluetoothName = v })
             it.addView(textField("Home address", prefs.homeAddress) { v -> prefs.homeAddress = v })
@@ -303,6 +315,7 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.READ_CALENDAR,
             "com.google.android.gms.permission.CAR_SPEED",
         )
         if (Build.VERSION.SDK_INT >= 31) perms += Manifest.permission.BLUETOOTH_CONNECT
@@ -314,6 +327,15 @@ class MainActivity : AppCompatActivity() {
     private fun askAlwaysLocation() {
         toast("Tap Location, then Allow all the time")
         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+    }
+
+    /** A one-choice list; [onPick] gets the chosen item. */
+    private fun pick(title: String, items: List<String>, current: String, onPick: (String) -> Unit) {
+        android.app.AlertDialog.Builder(this).setTitle(title)
+            .setSingleChoiceItems(items.toTypedArray(), items.indexOf(current)) { d, i ->
+                onPick(items[i])
+                d.dismiss()
+            }.show()
     }
 
     private fun openNowPlayingAccess() {

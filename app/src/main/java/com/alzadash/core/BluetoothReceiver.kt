@@ -30,7 +30,7 @@ class BluetoothReceiver : BroadcastReceiver() {
         if (prefs.resumeRadioOnConnect) prefs.lastStation?.let { Radio.play(context, it) }
         if (prefs.welcomeSound) {
             val pending = goAsync()
-            Chime.play { pending.finish() }
+            Chime.play(Look.tone(context)) { pending.finish() }
         }
     }
 }

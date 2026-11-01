@@ -26,7 +26,7 @@ class DashSession : Session() {
         surface = s
         TripTracker.start(carContext)
         attachCarSpeed()
-        if (Prefs(carContext).welcomeSound) Chime.play()
+        if (Prefs(carContext).welcomeSound) Chime.play(com.alzadash.core.Look.tone(carContext))
 
         lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onDestroy(owner: LifecycleOwner) {

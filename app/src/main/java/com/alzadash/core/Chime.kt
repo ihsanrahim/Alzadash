@@ -13,12 +13,18 @@ import kotlin.math.sin
 object Chime {
     private const val RATE = 44100
 
-    fun play(onDone: () -> Unit = {}) {
+    fun play(tone: String = "Chime", onDone: () -> Unit = {}) {
         thread(name = "welcome-chime") {
             try {
-                val notes = doubleArrayOf(523.25, 659.25, 783.99, 1046.50) // C5 E5 G5 C6
-                val step = (RATE * 0.16).toInt()
-                val ring = (RATE * 0.9).toInt()
+                // Each tone: its notes, the gap between them and how long each rings.
+                val (notes, gap, ringSec) = when (tone) {
+                    "Bell" -> Triple(doubleArrayOf(880.0, 1318.51), 0.35, 1.6)
+                    "Soft" -> Triple(doubleArrayOf(392.0, 493.88, 587.33), 0.22, 1.1)
+                    "Arcade" -> Triple(doubleArrayOf(659.25, 783.99, 1046.50, 1318.51, 1567.98), 0.08, 0.35)
+                    else -> Triple(doubleArrayOf(523.25, 659.25, 783.99, 1046.50), 0.16, 0.9) // C5 E5 G5 C6
+                }
+                val step = (RATE * gap).toInt()
+                val ring = (RATE * ringSec).toInt()
                 val buf = FloatArray(step * (notes.size - 1) + ring)
                 notes.forEachIndexed { i, f ->
                     val start = i * step

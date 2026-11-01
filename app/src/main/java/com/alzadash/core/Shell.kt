@@ -62,6 +62,11 @@ object Shell {
      * Opens an activity on the given display, in a new task, or with [newTask] false
      * bringing back the app's existing task so it keeps its state.
      */
+    /** Opens [uri] in app [pkg] on [display] (for example a YouTube page in the YouTube app). */
+    fun viewOnDisplay(display: Int, uri: String, pkg: String) {
+        run("am", "start", "--display", "$display", "-f", "0x18000000", "-a", "android.intent.action.VIEW", "-d", uri, "-p", pkg)
+    }
+
     fun startOnDisplay(
         display: Int, component: String, extraKey: String? = null, extraValue: String? = null, newTask: Boolean = true,
     ) {

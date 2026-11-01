@@ -2,7 +2,8 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    # Other branches are built too, as a compile check; only main publishes a release.
+    branches: ['**']
   workflow_dispatch:
 
 permissions:
@@ -94,6 +95,7 @@ jobs:
           path: AlzaDash.apk
 
       - name: Publish to the "latest" release
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest

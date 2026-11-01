@@ -29,6 +29,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
         surface.onStation = { st -> Radio.play(carContext, st) { say(it) } }
         surface.onSettings = { screenManager.push(SettingsScreen(carContext)) }
         surface.onMessage = { say(it) }
+        surface.onYouTube = { kind -> openYouTube(kind) }
         surface.onQuick = { kind ->
             when (kind) {
                 "mic" -> VoiceCommands.listen(carContext, this)
@@ -130,6 +131,33 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             else -> say("Tap Allow Shizuku in the AlzaDash phone app to open ${app.label} here")
         }
         invalidate()
+    }
+
+    /**
+     * The YouTube card: search by voice, or jump to Home, Subscriptions or History. Opens in the
+     * YouTube app on the car screen with Shizuku, otherwise in the car browser. Video shows only when parked.
+     */
+    private fun openYouTube(kind: String) {
+        fun go(url: String) {
+            val pm = carContext.packageManager
+            val pkg = listOf(Pkg.YOUTUBE, "app.revanced.android.youtube", "app.morphe.android.youtube")
+                .firstOrNull { pm.getLaunchIntentForPackage(it) != null }
+            if (pkg != null && Shell.available()) {
+                surface.openApp("$pkg/", url)
+                if (!TripTracker.isParked()) say("YouTube shows once you're parked. Sound keeps playing.")
+            } else {
+                surface.openUrl(url.replace("://www.", "://m."))
+            }
+            invalidate()
+        }
+        when (kind) {
+            "search" -> VoiceCommands.dictate(carContext, { words ->
+                go("https://www.youtube.com/results?search_query=" + Uri.encode(words))
+            }, { say(it) })
+            "subs" -> go("https://www.youtube.com/feed/subscriptions")
+            "history" -> go("https://www.youtube.com/feed/history")
+            else -> go("https://www.youtube.com/")
+        }
     }
 
     /** Voice typing into the app on the car screen. The phone's own keyboard also works. */
