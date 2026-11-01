@@ -41,6 +41,10 @@ class PlaybackService : MediaLibraryService() {
             .build()
         // Stations send the song or show on air in the stream (ICY); the dashboard shows it.
         exo.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                Radio.playing = isPlaying
+                NowPlaying.onChange()
+            }
             override fun onMetadata(metadata: androidx.media3.common.Metadata) {
                 for (i in 0 until metadata.length()) {
                     val e = metadata.get(i)

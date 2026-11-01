@@ -9,8 +9,59 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 
-/** Needed only so the app may read which song other apps are playing. */
-class NowPlayingListener : NotificationListenerService()
+/**
+ * Lets the app read which song other apps are playing. While connected it also watches for
+ * song changes, so lyrics are looked up the moment Spotify or YouTube Music starts a song.
+ */
+class NowPlayingListener : NotificationListenerService() {
+    private val callbacks = mutableMapOf<android.media.session.MediaSession.Token, android.media.session.MediaController.Callback>()
+    private var sessions: List<android.media.session.MediaController> = emptyList()
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val onSessions = MediaSessionManager.OnActiveSessionsChangedListener { list -> watch(list ?: emptyList()) }
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Lyrics.diskDir = java.io.File(cacheDir, "lyrics")
+        try {
+            val msm = getSystemService(MediaSessionManager::class.java)
+            val me = ComponentName(this, NowPlayingListener::class.java)
+            msm.addOnActiveSessionsChangedListener(onSessions, me, main)
+            watch(msm.getActiveSessions(me))
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun onListenerDisconnected() {
+        try { getSystemService(MediaSessionManager::class.java).removeOnActiveSessionsChangedListener(onSessions) } catch (_: Exception) {}
+        sessions.forEach { c -> callbacks[c.sessionToken]?.let { c.unregisterCallback(it) } }
+        callbacks.clear()
+        super.onListenerDisconnected()
+    }
+
+    private fun watch(list: List<android.media.session.MediaController>) {
+        sessions.forEach { c -> callbacks.remove(c.sessionToken)?.let { c.unregisterCallback(it) } }
+        sessions = list.filter { it.packageName != packageName }
+        for (c in sessions) {
+            val cb = object : android.media.session.MediaController.Callback() {
+                override fun onMetadataChanged(md: MediaMetadata?) = changed(c)
+                override fun onPlaybackStateChanged(state: PlaybackState?) = changed(c)
+            }
+            c.registerCallback(cb, main)
+            callbacks[c.sessionToken] = cb
+            changed(c)
+        }
+    }
+
+    private fun changed(c: android.media.session.MediaController) {
+        val md = c.metadata ?: return
+        val title = md.getString(MediaMetadata.METADATA_KEY_TITLE) ?: return
+        val artist = md.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE) ?: ""
+        if (c.playbackState?.state == PlaybackState.STATE_PLAYING || c.playbackState?.state == PlaybackState.STATE_BUFFERING) {
+            Lyrics.prefetch(Track(title, artist, c.packageName, md.getLong(MediaMetadata.METADATA_KEY_DURATION)))
+        }
+        NowPlaying.onChange()
+    }
+}
 
 /**
  * A song another app is playing. [positionMs] is where it was when read, worked out from the
@@ -26,6 +77,9 @@ data class Track(
 )
 
 object NowPlaying {
+    /** Set by the car screen to redraw straight away when a song starts, pauses or changes. */
+    @Volatile var onChange: () -> Unit = {}
+
     /** The music app to show in the player widget: the one playing, else the last one paused. */
     private fun pick(context: Context): android.media.session.MediaController? {
         if (!hasAccess(context)) return null

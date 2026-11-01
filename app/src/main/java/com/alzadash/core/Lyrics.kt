@@ -18,7 +18,38 @@ data class LyricLine(val atMs: Long, val text: String)
 object Lyrics {
     private val cache = ConcurrentHashMap<String, List<LyricLine>>()
     private val pending = ConcurrentHashMap.newKeySet<String>()
-    private val pool = Executors.newSingleThreadExecutor()
+    // Two at a time, so a new song isn't stuck behind a slow lookup for the last one.
+    private val pool = Executors.newFixedThreadPool(2)
+
+    /** Where found lyrics are kept between drives, so a song heard before shows its lyrics at once. */
+    @Volatile var diskDir: java.io.File? = null
+
+    private fun diskFile(k: String) = diskDir?.let { java.io.File(it, "lyr_" + Integer.toHexString(k.hashCode()) + ".lrc") }
+
+    private fun fromDisk(k: String): List<LyricLine>? = try {
+        diskFile(k)?.takeIf { it.exists() }?.readText()?.let { txt ->
+            if (txt.isBlank()) emptyList() else if (txt.startsWith("[")) parseLrc(txt) else txt.lines().map { LyricLine(-1, it) }
+        }
+    } catch (_: Exception) { null }
+
+    private fun toDisk(k: String, lines: List<LyricLine>) {
+        try {
+            val f = diskFile(k) ?: return
+            f.parentFile?.mkdirs()
+            f.writeText(if (lines.isNotEmpty() && lines[0].atMs >= 0) lines.joinToString("\n") {
+                val m = it.atMs / 60_000
+                val sec = (it.atMs % 60_000) / 1000.0
+                String.format(java.util.Locale.US, "[%02d:%05.2f]%s", m, sec, it.text)
+            } else lines.joinToString("\n") { it.text })
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Called when any music app starts a new song, so its lyrics are ready before the card is looked at. */
+    fun prefetch(t: Track) { get(t) }
+
+    /** Lets the car screen redraw as soon as lyrics arrive. */
+    @Volatile var onFound: () -> Unit = {}
 
     private fun key(t: Track) = "${t.title}|${t.artist}".lowercase()
 
@@ -28,8 +59,13 @@ object Lyrics {
         cache[k]?.let { return it }
         if (pending.add(k)) {
             pool.execute {
-                cache[k] = try { find(t) } catch (_: Exception) { emptyList() }
+                val saved = fromDisk(k)
+                // Not-found results aren't kept on disk, so they get another try next drive.
+                val lines = saved?.takeIf { it.isNotEmpty() } ?: try { find(t) } catch (_: Exception) { emptyList() }
+                cache[k] = lines
+                if (lines.isNotEmpty() && saved.isNullOrEmpty()) toDisk(k, lines)
                 pending.remove(k)
+                onFound()
             }
         }
         return null
@@ -42,6 +78,13 @@ object Lyrics {
     }
 
     private fun find(t: Track): List<LyricLine> {
+        // Fastest: an exact match on title, artist and length (Spotify and YouTube Music give clean names).
+        exact(t)?.let { hit ->
+            hit.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { return parseLrc(it) }
+            hit.optString("plainLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { plain ->
+                return plain.lines().map { LyricLine(-1, it.trim()) }
+            }
+        }
         for ((title, artist) in guesses(t)) {
             val hit = search(title, artist) ?: continue
             hit.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { return parseLrc(it) }
@@ -76,6 +119,13 @@ object Lyrics {
         .replace(Regex("(?i)\\s(ft\\.?|feat\\.?)\\s.*$"), "")
         .replace(Regex("\\s+"), " ")
         .trim()
+
+    private fun exact(t: Track): JSONObject? {
+        if (t.title.isBlank() || t.artist.isBlank()) return null
+        var url = "https://lrclib.net/api/get?track_name=" + enc(t.title) + "&artist_name=" + enc(t.artist.removeSuffix(" - Topic"))
+        if (t.durationMs > 0) url += "&duration=" + (t.durationMs / 1000)
+        return try { JSONObject(fetch(url)) } catch (_: Exception) { null }
+    }
 
     private fun search(title: String, artist: String): JSONObject? {
         if (title.isBlank()) return null

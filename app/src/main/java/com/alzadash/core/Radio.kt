@@ -19,6 +19,10 @@ object Radio {
     var current: Station? = null
         private set
 
+    /** True while the radio is actually sounding (it pauses itself when Spotify and others take over). */
+    @Volatile
+    var playing: Boolean = false
+
     /** What the station says is on air right now (song, artist or show), when it sends it. */
     @Volatile
     var streamTitle: String? = null

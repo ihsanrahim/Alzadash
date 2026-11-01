@@ -133,6 +133,11 @@ class DashboardView(context: Context) : View(context) {
 
     init {
         live[this] = Unit
+        // Redraw the moment a song changes or its lyrics arrive, not on the next tick.
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        val redraw: () -> Unit = { main.post { live.keys.toList().forEach { it.invalidate() } } }
+        NowPlaying.onChange = redraw
+        Lyrics.onFound = redraw
     }
 
     private fun on(f: Feature) = Features.on(context, f)
@@ -238,7 +243,11 @@ class DashboardView(context: Context) : View(context) {
             postInvalidateDelayed(50) // keeps the LATEST strip moving
             return
         }
-        track = if (on(Feature.LYRICS) || on(Feature.NOW_PLAYING)) NowPlaying.read(context) else null
+        // Follows whatever is sounding: a music app that's playing wins; with the radio off,
+        // a paused song stays on the card too.
+        track = if (on(Feature.LYRICS) || on(Feature.NOW_PLAYING)) {
+            NowPlaying.read(context) ?: if (!Radio.playing) NowPlaying.readAny(context) else null
+        } else null
         if (lyricsOpen && !preview) {
             if (track == null) lyricsOpen = false else {
                 drawLyricsPage(canvas, panel ?: RectF(if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea))
@@ -565,7 +574,7 @@ class DashboardView(context: Context) : View(context) {
         when {
             t != null -> {
                 musicRect.set(npRect.left, npRect.top, textRight - u * 0.2f, npRect.bottom)
-                canvas.drawText(ellipsize("NOW PLAYING · ${appName(t.pkg)}", accent, maxW), x, npRect.top + u * 0.55f, accent)
+                canvas.drawText(ellipsize((if (t.playing) "NOW PLAYING · " else "PAUSED · ") + appName(t.pkg), accent, maxW), x, npRect.top + u * 0.55f, accent)
                 canvas.drawText(ellipsize(t.title, text, maxW), x, npRect.top + u * 1.12f, text)
                 dim.textSize = u * 0.4f
                 val artistY = npRect.top + u * 1.6f
@@ -588,7 +597,7 @@ class DashboardView(context: Context) : View(context) {
                 }
             }
             station != null -> {
-                canvas.drawText("RADIO · LIVE", x, npRect.top + u * 0.55f, accent)
+                canvas.drawText(if (Radio.playing) "RADIO · LIVE" else "RADIO · PAUSED", x, npRect.top + u * 0.55f, accent)
                 canvas.drawText(ellipsize(station.name, text, maxW), x, npRect.top + u * 1.12f, text)
                 // The song or show the station says is on air.
                 val onAir = Radio.streamTitle
