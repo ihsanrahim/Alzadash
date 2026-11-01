@@ -264,9 +264,9 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         Input.moveTask(pkg, id) {
             Shell.startOnDisplay(id, component)
             main.postDelayed({
-                Input.moveTask(pkg, id) { moved ->
+                Input.moveTask(pkg, id) {
                     // A window moved in may land on top of the "hidden while driving" cover; put the cover back on top.
-                    if (moved) main.post { if (blocking && displayId == id) showCover(CoverActivity.BLOCK) }
+                    main.post { if (blocking && displayId == id) showCover(CoverActivity.BLOCK) }
                 }
             }, 1500)
         }
