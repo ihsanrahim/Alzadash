@@ -155,6 +155,21 @@ class MainActivity : AppCompatActivity() {
                 smallButton("Permissions") { requestPermissions() },
                 smallButton("Song access") { openNowPlayingAccess() },
             ))
+            // Phone mirroring works without Shizuku; these two switches let it rotate the phone and pass taps.
+            it.addView(buttonRow(
+                smallButton("Mirror: taps") {
+                    if (com.alzadash.mirror.MirrorTouch.enabled(this)) toast("Already on") else {
+                        toast("Find AlzaDash car mirroring and turn it on. If it's greyed out: Settings > Apps > AlzaDash > ⋮ > Allow restricted settings")
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    }
+                },
+                smallButton("Mirror: rotate") {
+                    if (Settings.canDrawOverlays(this)) toast("Already allowed") else {
+                        toast("Allow AlzaDash to display over other apps")
+                        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                    }
+                },
+            ))
             it.addView(buttonRow(
                 smallButton("Radio stations") { startActivity(Intent(this, StationsActivity::class.java)) },
                 smallButton("Test sound") { Chime.play() },
@@ -167,7 +182,8 @@ class MainActivity : AppCompatActivity() {
             it.addView(note(
                 "Install updates with KingInstaller (Shizuku Trick) so Android Auto lists AlzaDash.\n\n" +
                     "Video and web pages on the car screen show only while the car is stopped; sound keeps playing.\n\n" +
-                    "Opening real apps (YouTube, Spotify, Waze) on the car screen and typing into them need Shizuku running and allowed."
+                    "Opening real apps (YouTube, Spotify, Waze) on the car screen and typing into them need Shizuku running and allowed.\n\n" +
+                    "Without Shizuku, use phone mirroring (the cast button above ⚙ on the car screen). Turn on Mirror: taps and Mirror: rotate in Setup once."
             ))
         }
 

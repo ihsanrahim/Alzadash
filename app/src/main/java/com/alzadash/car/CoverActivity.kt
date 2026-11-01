@@ -17,6 +17,21 @@ class CoverActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         open += WeakReference(this)
+        if (intent.getStringExtra("kind") == MIRROR) {
+            // The phone's mirrored screen, kept inside the area Android Auto leaves free.
+            val root = FrameLayout(this).apply { setBackgroundColor(DashboardView.BG) }
+            val v = MirrorView(this)
+            val a = CarSurface.active?.get()?.contentArea()
+            val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            if (a != null && !a.isEmpty) root.post {
+                lp.setMargins(a.left, a.top, (root.width - a.right).coerceAtLeast(0), (root.height - a.bottom).coerceAtLeast(0))
+                v.layoutParams = lp
+            }
+            root.addView(v, lp)
+            setContentView(root)
+            mirror = WeakReference(v)
+            return
+        }
         if (intent.getStringExtra("kind") == WEB) {
             val root = FrameLayout(this)
             val page = FrameLayout(this)
@@ -93,6 +108,7 @@ class CoverActivity : Activity() {
             browser = null
         }
         open.removeAll { it.get() == null || it.get() === this }
+        if (mirror?.get()?.context === this) mirror = null
         super.onDestroy()
     }
 
@@ -100,6 +116,10 @@ class CoverActivity : Activity() {
         const val HOME = "home"
         const val BLOCK = "block"
         const val WEB = "web"
+        const val MIRROR = "mirror"
+
+        /** The mirrored phone screen shown in a cover screen, while open. */
+        var mirror: WeakReference<MirrorView>? = null
 
         /** The browser shown in a cover screen, while open. */
         var browser: CarBrowser? = null

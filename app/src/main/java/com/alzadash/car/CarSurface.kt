@@ -13,6 +13,8 @@ import androidx.car.app.SurfaceCallback
 import androidx.car.app.SurfaceContainer
 import com.alzadash.core.DashLayout
 import com.alzadash.core.Input
+import com.alzadash.mirror.Mirror
+import com.alzadash.mirror.MirrorTouch
 import com.alzadash.core.Pkg
 import com.alzadash.core.Shell
 import com.alzadash.core.Station
@@ -23,7 +25,7 @@ import java.lang.ref.WeakReference
  * DASH: the dashboard. WEB: the built-in browser. APP: a real phone app opened on the car screen.
  * SPLIT: Waze or Google Maps beside a narrow dashboard.
  */
-enum class Mode { DASH, WEB, APP, SPLIT }
+enum class Mode { DASH, WEB, APP, SPLIT, MIRROR }
 
 /**
  * Owns the car screen. It is a virtual display that shows [DashPresentation], and with Shizuku
@@ -38,6 +40,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     var onStation: (Station) -> Unit = {}
     var onSettings: () -> Unit = {}
     var onQuick: (String) -> Unit = {}
+    /** Short spoken/toast message for the driver. */
+    var onMessage: (String) -> Unit = {}
     var onOpenApp: (String) -> Unit = {}
     private var display: VirtualDisplay? = null
     private var presentation: DashPresentation? = null
@@ -125,6 +129,10 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     override fun onClick(x: Float, y: Float) {
+        if (mode == Mode.MIRROR) {
+            mirrorTap(x, y)
+            return
+        }
         val id = displayId
         if (mode == Mode.SPLIT) {
             val m = splitAreas().first
@@ -137,6 +145,10 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     override fun onScroll(distanceX: Float, distanceY: Float) {
+        if (mode == Mode.MIRROR) {
+            mirrorScroll(distanceX, distanceY)
+            return
+        }
         val id = displayId
         if (mode == Mode.SPLIT) {
             val m = splitAreas().first
@@ -162,7 +174,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     fun setMode(m: Mode) {
-        if (m == Mode.APP || m == Mode.SPLIT) return
+        if (m == Mode.APP || m == Mode.SPLIT || m == Mode.MIRROR) return
+        leaveMirror()
         if (mode == Mode.SPLIT) {
             SplitActivity.close()
             mode = m
@@ -188,6 +201,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     }
 
     fun openUrl(url: String) {
+        leaveMirror()
         val id = displayId
         if (mode == Mode.WEB && CoverActivity.browser != null) {
             CoverActivity.browser?.load(url)
@@ -249,6 +263,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     fun openApp(component: String) {
         val id = displayId
         if (id < 0) return
+        leaveMirror()
         if (mode == Mode.SPLIT) SplitActivity.close()
         mode = Mode.APP
         coverOnTop = false
@@ -285,6 +300,10 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     val browser: CarBrowser? get() = CoverActivity.browser ?: presentation?.browser
 
     fun goBack() {
+        if (mode == Mode.MIRROR) {
+            MirrorTouch.back()
+            return
+        }
         if (mode == Mode.APP) Shell.key(displayId, 4) else browser?.goBack()
     }
 
@@ -323,6 +342,87 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         if (id < 0) return
         coverOnTop = true
         Shell.startOnDisplay(id, "${carContext.packageName}/${CoverActivity::class.java.name}", "kind", kind)
+    }
+
+    // ---- Phone mirroring (no Shizuku needed) ----
+
+    /** Shows the phone's own screen on the car screen, asking the phone for permission first if needed. */
+    fun openMirror() {
+        val id = displayId
+        if (mode == Mode.SPLIT) SplitActivity.close()
+        if (!Mirror.active) Mirror.requestStart(carContext)
+        Mirror.onChange = {
+            presentation?.mirrorView?.refresh()
+            CoverActivity.mirror?.get()?.refresh()
+        }
+        if (wake.isHeld) wake.release()
+        wake.acquire(4 * 60 * 60_000L)
+        if ((mode == Mode.APP || coverOnTop) && id >= 0) {
+            // A phone app is open on the car screen above our own drawing; mirror in a cover screen on top.
+            mode = Mode.MIRROR
+            blocking = false
+            CoverActivity.finishAll()
+            showCover(CoverActivity.MIRROR)
+            return
+        }
+        mode = Mode.MIRROR
+        presentation?.let {
+            it.show()
+            it.setBlocked(false)
+            it.setMode(Mode.MIRROR)
+        }
+    }
+
+    /** Stops mirroring when the car screen switches to something else. */
+    private fun leaveMirror() {
+        if (mode != Mode.MIRROR) return
+        Mirror.stop(carContext)
+        if (wake.isHeld) wake.release()
+        if (coverOnTop) {
+            CoverActivity.finishAll()
+            coverOnTop = false
+            mode = Mode.APP // an app is still open underneath
+        } else {
+            mode = Mode.DASH
+        }
+    }
+
+    fun mirrorHome() = MirrorTouch.home()
+
+    private fun mirrorArea() = if (visible.isEmpty) Rect(0, 0, width, height) else visible
+
+    /** The part of the car screen Android Auto leaves free for us. */
+    fun contentArea(): Rect = Rect(mirrorArea())
+
+    private fun mirrorView(): MirrorView? = CoverActivity.mirror?.get() ?: presentation?.mirrorView
+
+    private fun mirrorTap(x: Float, y: Float) {
+        val v = mirrorView() ?: return
+        if (!v.accepting) return
+        val a = mirrorArea()
+        if (!a.contains(x.toInt(), y.toInt())) return
+        val p = Mirror.toPhone(carContext, x - a.left, y - a.top, a.width(), a.height()) ?: return
+        if (!MirrorTouch.tap(p.x, p.y)) onMessage("Turn on AlzaDash in Accessibility on your phone to tap here")
+    }
+
+    private var scrollX = 0f
+    private var scrollY = 0f
+    private val sendScroll = Runnable {
+        val a = mirrorArea()
+        val k = Mirror.scale(carContext, a.width(), a.height())
+        val c = Mirror.toPhone(carContext, a.width() / 2f, a.height() / 2f, a.width(), a.height())
+        if (c != null) MirrorTouch.swipe(c.x, c.y, c.x - scrollX * k, c.y - scrollY * k)
+        scrollX = 0f
+        scrollY = 0f
+    }
+
+    /** Car drags arrive as many small scrolls; they are gathered into one swipe on the phone. */
+    private fun mirrorScroll(dx: Float, dy: Float) {
+        if (mirrorView()?.accepting != true) return
+        scrollX += dx
+        scrollY += dy
+        handler.removeCallbacks(sendScroll)
+        handler.postDelayed(sendScroll, 80)
     }
 
     fun release(keepGate: Boolean = false) {

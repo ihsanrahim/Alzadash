@@ -28,12 +28,17 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
         surface.onRadioStep = { delta -> Radio.step(carContext, delta) { say(it) } }
         surface.onStation = { st -> Radio.play(carContext, st) { say(it) } }
         surface.onSettings = { screenManager.push(SettingsScreen(carContext)) }
+        surface.onMessage = { say(it) }
         surface.onQuick = { kind ->
             when (kind) {
                 "mic" -> VoiceCommands.listen(carContext, this)
                 "radio" -> screenManager.push(RadioScreen(carContext))
                 "nav" -> openMap()
                 "web" -> openBrowser()
+                "mirror" -> {
+                    surface.openMirror()
+                    invalidate()
+                }
             }
         }
         surface.onLinkOpened = { invalidate() }
@@ -67,6 +72,12 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
                 strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
                 strip.addAction(icon(R.drawable.ic_keyboard) { dictate() })
                 strip.addAction(icon(R.drawable.ic_radio) { screenManager.push(RadioScreen(carContext)) })
+            }
+            Mode.MIRROR -> {
+                strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
+                strip.addAction(icon(R.drawable.ic_back) { surface.goBack() })
+                strip.addAction(icon(R.drawable.ic_home) { surface.mirrorHome() })
+                strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
             }
             Mode.APP -> {
                 strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })

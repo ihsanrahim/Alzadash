@@ -99,10 +99,28 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
         }
     }
 
+    /** The phone's mirrored screen while in [Mode.MIRROR]. */
+    var mirrorView: MirrorView? = null
+        private set
+
     fun setMode(m: Mode) {
         mode = m
         if (!::root.isInitialized) return
-        if (m == Mode.WEB) {
+        if (m != Mode.MIRROR) mirrorView?.let {
+            videoLayer.removeView(it)
+            mirrorView = null
+        }
+        if (m == Mode.MIRROR) {
+            browser?.destroy()
+            browser = null
+            if (mirrorView == null) {
+                val v = MirrorView(getContext())
+                videoLayer.addView(v, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                mirrorView = v
+            }
+            videoLayer.visibility = View.VISIBLE
+            dash.visibility = View.GONE
+        } else if (m == Mode.WEB) {
             if (browser == null) browser = CarBrowser(getContext(), videoLayer, lastUrl)
             videoLayer.visibility = View.VISIBLE
             dash.visibility = View.GONE
@@ -135,7 +153,8 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
 
     /** The safety gate: video shows only when the car is confirmed stopped. */
     private fun updateVideoGate() {
-        if (mode != Mode.WEB && !forcedBlock) {
+        // Mirroring has its own driving cover inside MirrorView.
+        if ((mode != Mode.WEB && !forcedBlock) || (mode == Mode.MIRROR && !forcedBlock)) {
             block.visibility = View.GONE
             return
         }

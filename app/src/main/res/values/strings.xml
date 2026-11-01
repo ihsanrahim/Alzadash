@@ -2,4 +2,5 @@
     <string name="app_name">AlzaDash</string>
     <string name="all_apps">All apps</string>
     <string name="stations">Radio stations</string>
+    <string name="mirror_touch_desc">Lets taps on the car screen reach your phone while it is mirrored to the car. AlzaDash only sends the taps you make on the car screen and reads nothing on your phone.</string>
 </resources>

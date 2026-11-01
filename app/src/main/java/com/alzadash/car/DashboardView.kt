@@ -102,6 +102,12 @@ class DashboardView(context: Context) : View(context) {
     private val chipRects = mutableListOf<Pair<RectF, Station>>()
     private val settingsRect = RectF()
     private val quickRects = mutableListOf<Pair<RectF, String>>()
+    private val mirrorRect = RectF()
+    private val appsRect = RectF()
+    private val panelRect = RectF()
+    /** Whether the apps row is folded out. */
+    private var dockOpen = false
+    private val solidCard = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F0202A3A") }
     private val quickIcons = mutableMapOf<String, android.graphics.drawable.Drawable?>()
     private val musicRect = RectF()
     private val closeRect = RectF()
@@ -165,7 +171,17 @@ class DashboardView(context: Context) : View(context) {
             }
             return
         }
+        // The folded-out apps row takes taps first; a tap anywhere else folds it away.
+        if (dockOpen) {
+            val hit = dockRects.firstOrNull { it.first.contains(x, y) }
+            dockOpen = false
+            invalidate()
+            if (hit != null) { onDockTap(hit.second); return }
+            if (appsRect.contains(x, y) || panelRect.contains(x, y)) return
+        }
         when {
+            appsRect.contains(x, y) -> { dockOpen = true; invalidate() }
+            mirrorRect.contains(x, y) -> onQuick("mirror")
             settingsRect.contains(x, y) -> onSettingsTap()
             quickRects.any { it.first.contains(x, y) } -> onQuick(quickRects.first { it.first.contains(x, y) }.second)
             prevRect.contains(x, y) -> onRadioStep(-1)
@@ -173,7 +189,7 @@ class DashboardView(context: Context) : View(context) {
             musicRect.contains(x, y) && track != null -> showLyrics(true)
             newsRect.contains(x, y) -> showNews(true)
             rowRect.contains(x, y) -> chipRects.firstOrNull { it.first.contains(x, y) }?.let { onStationTap(it.second) }
-            else -> dockRects.firstOrNull { it.first.contains(x, y) }?.let { onDockTap(it.second) }
+            else -> {}
         }
     }
 
@@ -194,6 +210,9 @@ class DashboardView(context: Context) : View(context) {
         chipRects.clear()
         settingsRect.setEmpty()
         quickRects.clear()
+        mirrorRect.setEmpty()
+        appsRect.setEmpty()
+        panelRect.setEmpty()
         prevRect.setEmpty()
         nextRect.setEmpty()
         musicRect.setEmpty()
@@ -274,7 +293,10 @@ class DashboardView(context: Context) : View(context) {
             settingsRect.set(a.right - s * 1.2f, a.bottom - s * 1.2f, a.right - s * 0.2f, a.bottom - s * 0.2f)
             canvas.drawRoundRect(settingsRect, s * 0.25f, s * 0.25f, card)
             drawGear(canvas, settingsRect)
-            val grid = RectF(settingsRect.left, settingsRect.top - settingsRect.height() - s * 0.2f, settingsRect.right, settingsRect.top - s * 0.2f)
+            mirrorRect.set(settingsRect.left, settingsRect.top - settingsRect.height() - s * 0.2f, settingsRect.right, settingsRect.top - s * 0.2f)
+            canvas.drawRoundRect(mirrorRect, s * 0.25f, s * 0.25f, card)
+            drawIcon(canvas, com.alzadash.R.drawable.ic_mirror, mirrorRect, 0.5f)
+            val grid = RectF(mirrorRect.left, mirrorRect.top - mirrorRect.height() - s * 0.2f, mirrorRect.right, mirrorRect.top - s * 0.2f)
             canvas.drawRoundRect(grid, s * 0.25f, s * 0.25f, card)
             drawQuick(canvas, grid)
         }
@@ -638,34 +660,56 @@ class DashboardView(context: Context) : View(context) {
         canvas.drawText(String.format(Locale.US, "H %.0f°  L %.0f°", w.highC, w.lowC), lx, r.top + u * 1.5f, dim)
     }
 
-    /** The shortcut bar, with the ⚙ settings button at its foot (shown even when the bar is turned off). */
+    /**
+     * The shortcut bar. From the top: the apps button (its apps fold out sideways when tapped),
+     * then at the foot the four quick buttons, phone mirroring and ⚙ settings.
+     */
     private fun drawDock(canvas: Canvas, l: Float, t: Float, r: Float, b: Float, u: Float) {
         // Laid out down the bar, or across it when the bar was made wide in the layout editor.
         val across = r - l > b - t
         val thick = if (across) b - t else r - l
-        val gear = if (across) RectF(r - thick, t, r, b) else RectF(l, b - thick, r, b)
+        fun slotFromEnd(n: Float, size: Float) =
+            if (across) RectF(r - n - size, t, r - n, b) else RectF(l, b - n - size, r, b - n)
+        val gear = slotFromEnd(0f, thick)
         settingsRect.set(gear)
         canvas.drawRoundRect(RectF(l, t, r, b), thick * 0.25f, thick * 0.25f, card)
         drawGear(canvas, gear)
-        // The four quick buttons sit in a small square next to ⚙ at the bottom right.
-        val quick = if (across) RectF(gear.left - thick, t, gear.left, b) else RectF(l, gear.top - thick, r, gear.top)
+        mirrorRect.set(slotFromEnd(thick, thick * 0.85f))
+        drawIcon(canvas, com.alzadash.R.drawable.ic_mirror, mirrorRect, 0.5f)
+        val quick = slotFromEnd(thick * 1.85f, thick)
         drawQuick(canvas, quick)
+
+        // Apps that open on the car screen (they need Shizuku) sit behind one button.
+        val apps = if (across) RectF(l, t, l + thick, b) else RectF(l, t, r, t + thick)
+        appsRect.set(apps)
+        if (dockOpen) canvas.drawRoundRect(apps, thick * 0.25f, thick * 0.25f, bar)
+        drawIcon(canvas, com.alzadash.R.drawable.ic_apps, apps, 0.45f)
+        if (!dockOpen) return
         if (System.currentTimeMillis() - dockLoadedAt > 15_000) {
             dockApps = Dock.load(context)
             dockLoadedAt = System.currentTimeMillis()
         }
-        val apps = dockApps
-        if (apps.isEmpty()) return
-        val length = if (across) gear.left - thick - l else gear.top - thick - t
-        val slot = length / maxOf(apps.size, 4)
-        val size = min(thick * 0.62f, slot * 0.62f)
-        val start = (length - slot * apps.size) / 2
-        apps.forEachIndexed { i, app ->
-            val mid = start + slot * i + slot / 2
-            val cx = if (across) l + mid else (l + r) / 2
-            val cy = if (across) (t + b) / 2 else t + mid
+        val list = dockApps
+        val gap = thick * 0.15f
+        val n = maxOf(list.size, 1)
+        // Folds out to the left of the bar (or upward from a bar laid across the bottom), in one row.
+        val panel = if (across) RectF(apps.left, apps.top - gap - thick, apps.left + n * thick, apps.top - gap)
+        else RectF(apps.left - gap - n * thick, apps.top, apps.left - gap, apps.bottom)
+        if (panel.left < 0) panel.offset(-panel.left, 0f)
+        panelRect.set(panel)
+        canvas.drawRoundRect(panel, thick * 0.25f, thick * 0.25f, solidCard)
+        if (list.isEmpty()) {
+            dim.textSize = thick * 0.2f
+            val msg = "Pick apps in the phone app"
+            canvas.drawText(ellipsize(msg, dim, panel.width() - thick * 0.2f), panel.left + thick * 0.1f, panel.centerY() + thick * 0.07f, dim)
+            return
+        }
+        val size = thick * 0.62f
+        list.forEachIndexed { i, app ->
+            val cx = panel.left + thick * i + thick / 2
+            val cy = panel.centerY()
             val rect = RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
-            dockRects += (if (across) RectF(cx - slot / 2, t, cx + slot / 2, b) else RectF(l, cy - slot / 2, r, cy + slot / 2)) to app
+            dockRects += RectF(cx - thick / 2, panel.top, cx + thick / 2, panel.bottom) to app
             val icon = icons.getOrPut(app.pkg) { Dock.icon(context, app) }
             if (icon != null) {
                 icon.setBounds(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
@@ -678,6 +722,16 @@ class DashboardView(context: Context) : View(context) {
                 canvas.drawText(letter, cx - text.measureText(letter) / 2, cy + size * 0.16f, text)
             }
         }
+    }
+
+    private fun drawIcon(canvas: Canvas, res: Int, r: RectF, frac: Float) {
+        val icon = quickIcons.getOrPut("res$res") {
+            try { context.getDrawable(res)?.mutate()?.apply { setTint(Color.WHITE) } } catch (_: Exception) { null }
+        } ?: return
+        val size = min(r.width(), r.height()) * frac
+        icon.setBounds((r.centerX() - size / 2).toInt(), (r.centerY() - size / 2).toInt(),
+            (r.centerX() + size / 2).toInt(), (r.centerY() + size / 2).toInt())
+        icon.draw(canvas)
     }
 
     private fun drawGear(canvas: Canvas, r: RectF) {
