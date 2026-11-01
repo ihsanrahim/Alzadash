@@ -37,6 +37,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     var onRadioStep: (Int) -> Unit = {}
     var onStation: (Station) -> Unit = {}
     var onSettings: () -> Unit = {}
+    var onQuick: (String) -> Unit = {}
     var onOpenApp: (String) -> Unit = {}
     private var display: VirtualDisplay? = null
     private var presentation: DashPresentation? = null
@@ -85,7 +86,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         width = container.width
         height = container.height
         dpi = container.dpi
-        if (visible.isEmpty && height > 0) DashLayout.saveCarAspect(carContext, width.toFloat() / height)
+        if (height > 0) DashLayout.saveCarAspect(carContext, width.toFloat() / height)
         val dm = carContext.getSystemService(DisplayManager::class.java)
         val vd = dm.createVirtualDisplay("AlzaDash", width, height, container.dpi, surface, 0)
         display = vd
@@ -96,6 +97,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
             it.onRadioStep = { d -> onRadioStep(d) }
             it.onStation = { st -> onStation(st) }
             it.onSettings = { onSettings() }
+            it.onQuick = { k -> onQuick(k) }
             it.onOpenApp = { pkg -> onOpenApp(pkg) }
             it.onOpenLink = { url -> openLink(url) }
             it.setMode(if (mode == Mode.APP) Mode.DASH else mode)
@@ -106,7 +108,8 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
     override fun onVisibleAreaChanged(visibleArea: Rect) {
         visible = Rect(visibleArea)
         presentation?.setVisibleArea(visible)
-        if (!visible.isEmpty) DashLayout.saveCarAspect(carContext, visible.width().toFloat() / visible.height())
+        // The dashboard now fills the whole surface, so the editor matches the full screen shape.
+        if (height > 0) DashLayout.saveCarAspect(carContext, width.toFloat() / height)
         SplitActivity.relayout()
     }
 

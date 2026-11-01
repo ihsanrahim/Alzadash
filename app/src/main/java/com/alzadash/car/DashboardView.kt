@@ -76,6 +76,15 @@ class DashboardView(context: Context) : View(context) {
     /** Called when the ⚙ settings button is tapped. */
     var onSettingsTap: () -> Unit = {}
 
+    /** Called when one of the small buttons above ⚙ is tapped: "mic", "radio", "nav" or "web". */
+    var onQuick: (String) -> Unit = {}
+
+    /**
+     * Top-right corner still covered by Android Auto's one required button; widgets that
+     * would sit under it start just below it.
+     */
+    private val reserved = RectF()
+
     /** Called from the lyrics page to open the music app itself on the car screen. */
     var onOpenApp: (String) -> Unit = {}
 
@@ -92,6 +101,8 @@ class DashboardView(context: Context) : View(context) {
     private val rowRect = RectF()
     private val chipRects = mutableListOf<Pair<RectF, Station>>()
     private val settingsRect = RectF()
+    private val quickRects = mutableListOf<Pair<RectF, String>>()
+    private val quickIcons = mutableMapOf<String, android.graphics.drawable.Drawable?>()
     private val musicRect = RectF()
     private val closeRect = RectF()
     private val openAppRect = RectF()
@@ -156,6 +167,7 @@ class DashboardView(context: Context) : View(context) {
         }
         when {
             settingsRect.contains(x, y) -> onSettingsTap()
+            quickRects.any { it.first.contains(x, y) } -> onQuick(quickRects.first { it.first.contains(x, y) }.second)
             prevRect.contains(x, y) -> onRadioStep(-1)
             nextRect.contains(x, y) -> onRadioStep(1)
             musicRect.contains(x, y) && track != null -> showLyrics(true)
@@ -181,6 +193,7 @@ class DashboardView(context: Context) : View(context) {
         rowRect.setEmpty()
         chipRects.clear()
         settingsRect.setEmpty()
+        quickRects.clear()
         prevRect.setEmpty()
         nextRect.setEmpty()
         musicRect.setEmpty()
@@ -205,13 +218,20 @@ class DashboardView(context: Context) : View(context) {
             drawColumn(canvas, it, lat, lng)
             return
         }
-        val a = RectF(if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea)
+        // The dashboard fills the whole car screen, including the band Android Auto keeps
+        // for its buttons; only the corner under its one remaining button is avoided.
+        val a = RectF(0f, 0f, width.toFloat(), height.toFloat())
+        val v = visibleArea
+        reserved.setEmpty()
+        if (!v.isEmpty && v.top > 0) reserved.set(width - v.top * 1.7f, 0f, width.toFloat(), v.top.toFloat())
+        else if (!v.isEmpty && v.right < width) reserved.set(v.right.toFloat(), 0f, width.toFloat(), (width - v.right) * 1.2f)
         val layout = DashLayout.get(context)
         var dockShown = false
         // Each widget sits where the phone's layout editor put it, its text sized to its box.
         for (w in Widget.values()) {
             if (w.feature != null && !on(w.feature)) continue
             val r = DashLayout.place(layout.getValue(w), a)
+            if (!reserved.isEmpty && RectF.intersects(r, reserved) && r.bottom > reserved.bottom + 8) r.top = reserved.bottom + 4
             if (r.width() < 4 || r.height() < 4) continue
             when (w) {
                 Widget.CLOCK -> {
@@ -253,6 +273,28 @@ class DashboardView(context: Context) : View(context) {
             settingsRect.set(a.right - s * 1.2f, a.bottom - s * 1.2f, a.right - s * 0.2f, a.bottom - s * 0.2f)
             canvas.drawRoundRect(settingsRect, s * 0.25f, s * 0.25f, card)
             drawGear(canvas, settingsRect)
+            val grid = RectF(settingsRect.left, settingsRect.top - settingsRect.height() - s * 0.2f, settingsRect.right, settingsRect.top - s * 0.2f)
+            canvas.drawRoundRect(grid, s * 0.25f, s * 0.25f, card)
+            drawQuick(canvas, grid)
+        }
+    }
+
+    /** Mic, radio, maps and web as four small buttons in a 2×2 square. */
+    private fun drawQuick(canvas: Canvas, r: RectF) {
+        val kinds = listOf("mic" to com.alzadash.R.drawable.ic_mic, "radio" to com.alzadash.R.drawable.ic_radio,
+            "nav" to com.alzadash.R.drawable.ic_nav, "web" to com.alzadash.R.drawable.ic_globe)
+        val cw = r.width() / 2
+        val ch = r.height() / 2
+        kinds.forEachIndexed { i, (kind, res) ->
+            val cell = RectF(r.left + (i % 2) * cw, r.top + (i / 2) * ch, r.left + (i % 2 + 1) * cw, r.top + (i / 2 + 1) * ch)
+            quickRects += cell to kind
+            val size = min(cw, ch) * 0.5f
+            val icon = quickIcons.getOrPut(kind) {
+                try { context.getDrawable(res)?.mutate()?.apply { setTint(Color.WHITE) } } catch (_: Exception) { null }
+            } ?: return@forEachIndexed
+            icon.setBounds((cell.centerX() - size / 2).toInt(), (cell.centerY() - size / 2).toInt(),
+                (cell.centerX() + size / 2).toInt(), (cell.centerY() + size / 2).toInt())
+            icon.draw(canvas)
         }
     }
 
@@ -587,13 +629,16 @@ class DashboardView(context: Context) : View(context) {
         settingsRect.set(gear)
         canvas.drawRoundRect(RectF(l, t, r, b), thick * 0.25f, thick * 0.25f, card)
         drawGear(canvas, gear)
+        // The four quick buttons sit in a small square next to ⚙ at the bottom right.
+        val quick = if (across) RectF(gear.left - thick, t, gear.left, b) else RectF(l, gear.top - thick, r, gear.top)
+        drawQuick(canvas, quick)
         if (System.currentTimeMillis() - dockLoadedAt > 15_000) {
             dockApps = Dock.load(context)
             dockLoadedAt = System.currentTimeMillis()
         }
         val apps = dockApps
         if (apps.isEmpty()) return
-        val length = if (across) gear.left - l else gear.top - t
+        val length = if (across) gear.left - thick - l else gear.top - thick - t
         val slot = length / maxOf(apps.size, 4)
         val size = min(thick * 0.62f, slot * 0.62f)
         val start = (length - slot * apps.size) / 2

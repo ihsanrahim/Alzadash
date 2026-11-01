@@ -28,6 +28,14 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
         surface.onRadioStep = { delta -> Radio.step(carContext, delta) { say(it) } }
         surface.onStation = { st -> Radio.play(carContext, st) { say(it) } }
         surface.onSettings = { screenManager.push(SettingsScreen(carContext)) }
+        surface.onQuick = { kind ->
+            when (kind) {
+                "mic" -> VoiceCommands.listen(carContext, this)
+                "radio" -> screenManager.push(RadioScreen(carContext))
+                "nav" -> openMap()
+                "web" -> openBrowser()
+            }
+        }
         surface.onLinkOpened = { invalidate() }
         surface.onOpenApp = { pkg ->
             DashboardView.showLyrics(false)
@@ -42,10 +50,9 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
         // Android Auto allows only one button with a text label here; the rest are icons.
         when (surface.mode) {
             Mode.DASH -> {
+                // Android Auto insists on at least one button up here; the rest are drawn
+                // small at the bottom right of the dashboard.
                 strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
-                strip.addAction(icon(R.drawable.ic_radio) { screenManager.push(RadioScreen(carContext)) })
-                strip.addAction(icon(R.drawable.ic_nav) { openMap() })
-                strip.addAction(icon(R.drawable.ic_globe) { openBrowser() })
             }
             Mode.WEB -> {
                 strip.addAction(Action.Builder().setTitle("Go").setOnClickListener {

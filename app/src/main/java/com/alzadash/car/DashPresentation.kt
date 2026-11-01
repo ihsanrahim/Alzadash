@@ -36,6 +36,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     var onRadioStep: (Int) -> Unit = {}
     var onStation: (com.alzadash.core.Station) -> Unit = {}
     var onSettings: () -> Unit = {}
+    var onQuick: (String) -> Unit = {}
     var onOpenApp: (String) -> Unit = {}
     var onOpenLink: (String) -> Unit = {}
     private val handler = Handler(Looper.getMainLooper())
@@ -57,6 +58,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
             onRadioStep = { d -> this@DashPresentation.onRadioStep(d) }
             onStationTap = { st -> onStation(st) }
             onSettingsTap = { onSettings() }
+            onQuick = { k -> onQuick(k) }
             onOpenApp = { pkg -> this@DashPresentation.onOpenApp(pkg) }
             onOpenLink = { url -> this@DashPresentation.onOpenLink(url) }
         }

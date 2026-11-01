@@ -50,6 +50,7 @@ class CoverActivity : Activity() {
                 onRadioStep = { d -> CarSurface.active?.get()?.onRadioStep?.invoke(d) }
                 onStationTap = { st -> CarSurface.active?.get()?.onStation?.invoke(st) }
                 onSettingsTap = { CarSurface.active?.get()?.onSettings?.invoke() }
+                onQuick = { k -> CarSurface.active?.get()?.onQuick?.invoke(k) }
                 onOpenApp = { pkg -> CarSurface.active?.get()?.onOpenApp?.invoke(pkg) }
                 onOpenLink = { url -> CarSurface.active?.get()?.openLink(url) }
                 val tick = object : Runnable {
