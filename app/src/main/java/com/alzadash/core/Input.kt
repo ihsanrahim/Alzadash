@@ -41,7 +41,7 @@ object Input {
                 .daemon(false)
                 .processNameSuffix("input")
                 .debuggable(false)
-                .version(4)
+                .version(5)
             Shizuku.bindUserService(args, connection)
         } catch (_: Throwable) {
             binding = false
@@ -65,6 +65,16 @@ object Input {
             handler.postDelayed({ send(display, MotionEvent.ACTION_UP, x, y, down) }, 40)
         }
         return true
+    }
+
+    /** Moves [pkg]'s open window from the phone to [display]; [done] gets whether it moved. */
+    fun moveTask(pkg: String, display: Int, done: (Boolean) -> Unit = {}) {
+        val s = service
+        if (s == null) { done(false); return }
+        handler.post {
+            val moved = try { s.moveTask(pkg, display) } catch (_: Throwable) { service = null; false }
+            done(moved)
+        }
     }
 
     fun key(display: Int, code: Int): Boolean {

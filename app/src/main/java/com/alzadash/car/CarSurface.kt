@@ -256,7 +256,20 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         CoverActivity.finishAll()
         presentation?.hide()
         wake.acquire(4 * 60 * 60_000L)
-        Shell.startOnDisplay(id, component)
+        // An app already open on the phone is moved over first; otherwise Android would bring
+        // it up on the phone again. Then it is started (or brought to the front) on the car
+        // screen, and checked once more in case Android still put it on the phone.
+        val pkg = component.substringBefore('/')
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        Input.moveTask(pkg, id) {
+            Shell.startOnDisplay(id, component)
+            main.postDelayed({
+                Input.moveTask(pkg, id) { moved ->
+                    // A window moved in may land on top of the "hidden while driving" cover; put the cover back on top.
+                    if (moved) main.post { if (blocking && displayId == id) showCover(CoverActivity.BLOCK) }
+                }
+            }, 1500)
+        }
         checkGate()
     }
 

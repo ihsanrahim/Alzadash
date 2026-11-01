@@ -92,7 +92,8 @@
             </intent-filter>
         </service>
 
-        <!-- Also an Android Auto media app, so the radio can sit next to Waze and use the steering buttons. -->
+        <!-- Radio playback. Not listed as a separate Android Auto media app any more: having both
+             in one package made Android Auto sometimes open "AlzaDash Radio" instead of the dashboard. -->
         <service
             android:name=".core.PlaybackService"
             android:exported="true"
@@ -100,7 +101,6 @@
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
-                <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
 
