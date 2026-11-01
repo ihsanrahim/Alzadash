@@ -260,7 +260,8 @@ class DashboardView(context: Context) : View(context) {
                 }
                 Widget.NEWS -> drawNewsTicker(canvas, r, min(r.height() / 1.3f, r.width() / 8f))
                 Widget.RADIO_ROW -> drawRadioRow(canvas, r, r.height() / 0.8f)
-                Widget.NOW_PLAYING -> drawNowPlaying(canvas, r, min(r.height() / 2.0f, r.width() / 10f))
+                Widget.NOW_PLAYING -> drawNowPlaying(canvas, r, min(r.height() / 2.0f, r.width() / 10f),
+                    withButtons = !on(Feature.RADIO_ROW) || Prefs(context).orderedStations.isEmpty())
                 Widget.DOCK -> {
                     drawDock(canvas, r.left, r.top, r.right, r.bottom, r.width() / 1.9f)
                     dockShown = true
@@ -341,9 +342,16 @@ class DashboardView(context: Context) : View(context) {
     }
 
     /** Radio stations side by side, seven at a time; drag sideways to see the rest. */
-    private fun drawRadioRow(canvas: Canvas, r: RectF, u: Float) {
+    private fun drawRadioRow(canvas: Canvas, row: RectF, u: Float) {
         val stations = Prefs(context).orderedStations
         if (stations.isEmpty()) return
+        // Small ◀ ▶ at the end of the row change station.
+        val btn = row.height()
+        nextRect.set(row.right - btn, row.top, row.right, row.bottom)
+        prevRect.set(nextRect.left - btn - u * 0.15f, row.top, nextRect.left - u * 0.15f, row.bottom)
+        drawStepButton(canvas, prevRect, -1)
+        drawStepButton(canvas, nextRect, 1)
+        val r = RectF(row.left, row.top, prevRect.left - u * 0.2f, row.bottom)
         rowRect.set(r)
         val gap = u * 0.2f
         val chipW = (r.width() - gap * 6) / 7
@@ -434,24 +442,28 @@ class DashboardView(context: Context) : View(context) {
      * What's playing: song and artist from YouTube, Spotify or any music app, with the lyric
      * line being sung underneath; or the radio station. ◀ ▶ change radio station.
      */
-    private fun drawNowPlaying(canvas: Canvas, npRect: RectF, u: Float) {
+    private fun drawNowPlaying(canvas: Canvas, npRect: RectF, u: Float, withButtons: Boolean = true) {
         canvas.drawRoundRect(npRect, u * 0.4f, u * 0.4f, card)
         val station = Radio.current
         val t = track
-        val btn = minOf(npRect.height() * 0.6f, u * 1.1f)
-        val by = npRect.centerY()
-        nextRect.set(npRect.right - u * 0.4f - btn, by - btn / 2, npRect.right - u * 0.4f, by + btn / 2)
-        prevRect.set(nextRect.left - u * 0.3f - btn, nextRect.top, nextRect.left - u * 0.3f, nextRect.bottom)
-        drawStepButton(canvas, prevRect, -1)
-        drawStepButton(canvas, nextRect, 1)
         val x = npRect.left + u * 0.5f
-        val maxW = prevRect.left - x - u * 0.4f
+        // ◀ ▶ live in the station row when it's shown; otherwise they sit here.
+        val textRight = if (withButtons) {
+            val btn = minOf(npRect.height() * 0.6f, u * 1.1f)
+            val by = npRect.centerY()
+            nextRect.set(npRect.right - u * 0.4f - btn, by - btn / 2, npRect.right - u * 0.4f, by + btn / 2)
+            prevRect.set(nextRect.left - u * 0.3f - btn, nextRect.top, nextRect.left - u * 0.3f, nextRect.bottom)
+            drawStepButton(canvas, prevRect, -1)
+            drawStepButton(canvas, nextRect, 1)
+            prevRect.left
+        } else npRect.right
+        val maxW = textRight - x - u * 0.4f
         accent.textSize = u * 0.36f
         text.typeface = bold
         text.textSize = u * 0.52f
         when {
             t != null -> {
-                musicRect.set(npRect.left, npRect.top, prevRect.left - u * 0.2f, npRect.bottom)
+                musicRect.set(npRect.left, npRect.top, textRight - u * 0.2f, npRect.bottom)
                 canvas.drawText(ellipsize("NOW PLAYING · ${appName(t.pkg)}", accent, maxW), x, npRect.top + u * 0.55f, accent)
                 canvas.drawText(ellipsize(t.title, text, maxW), x, npRect.top + u * 1.12f, text)
                 dim.textSize = u * 0.4f
@@ -475,8 +487,14 @@ class DashboardView(context: Context) : View(context) {
                 }
             }
             station != null -> {
-                canvas.drawText("RADIO", x, npRect.top + u * 0.55f, accent)
+                canvas.drawText("RADIO · LIVE", x, npRect.top + u * 0.55f, accent)
                 canvas.drawText(ellipsize(station.name, text, maxW), x, npRect.top + u * 1.12f, text)
+                // The song or show the station says is on air.
+                val onAir = Radio.streamTitle
+                if (onAir != null && npRect.height() >= u * 1.75f) {
+                    dim.textSize = u * 0.4f
+                    canvas.drawText(ellipsize("♪ $onAir", dim, maxW), x, npRect.top + u * 1.6f, dim)
+                }
             }
             else -> {
                 canvas.drawText("INSTANT RADIO", x, npRect.top + u * 0.55f, accent)

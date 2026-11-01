@@ -28,6 +28,7 @@ import kotlin.concurrent.thread
 class PlaybackService : MediaLibraryService() {
     private var session: MediaLibrarySession? = null
 
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
         val attrs = AudioAttributes.Builder()
@@ -38,6 +39,17 @@ class PlaybackService : MediaLibraryService() {
             .setAudioAttributes(attrs, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
+        // Stations send the song or show on air in the stream (ICY); the dashboard shows it.
+        exo.addListener(object : Player.Listener {
+            override fun onMetadata(metadata: androidx.media3.common.Metadata) {
+                for (i in 0 until metadata.length()) {
+                    val e = metadata.get(i)
+                    if (e is androidx.media3.extractor.metadata.icy.IcyInfo) {
+                        Radio.streamTitle = e.title?.trim()?.trim('-', ' ')?.takeIf { it.isNotEmpty() }
+                    }
+                }
+            }
+        })
         // Next/previous always mean "change station", whatever is in the player's queue.
         val player = object : ForwardingPlayer(exo) {
             override fun getAvailableCommands(): Player.Commands =

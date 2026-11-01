@@ -19,6 +19,10 @@ object Radio {
     var current: Station? = null
         private set
 
+    /** What the station says is on air right now (song, artist or show), when it sends it. */
+    @Volatile
+    var streamTitle: String? = null
+
 
     private fun withController(context: Context, block: (MediaController) -> Unit) {
         val app = context.applicationContext
@@ -73,6 +77,7 @@ object Radio {
     }
 
     private fun start(context: Context, station: Station, url: String) {
+        streamTitle = null
         withController(context) { c ->
             val item = MediaItem.Builder()
                 .setMediaId(station.name)
