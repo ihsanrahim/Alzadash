@@ -2,156 +2,52 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
-    <!-- Android Auto: a navigation app may draw its own screen (dashboard and browser). -->
-    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
-    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
-    <uses-permission android:name="com.google.android.gms.permission.CAR_SPEED" />
 
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
-        <intent>
-            <action android:name="android.speech.RecognitionService" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW" />
-            <data android:scheme="https" />
-        </intent>
-        <package android:name="com.android.vending" />
-        <package android:name="com.netflix.mediaclient" />
-        <package android:name="com.google.android.youtube" />
-        <package android:name="com.google.android.apps.bard" />
-        <package android:name="com.google.android.apps.maps" />
-        <package android:name="com.waze" />
-        <package android:name="app.revanced.android.youtube" />
-        <package android:name="app.rvx.android.youtube" />
-        <package android:name="app.morphe.android.youtube" />
-        <package android:name="in.startv.hotstar.dplus" />
-        <package android:name="in.startv.hotstar" />
-        <package android:name="com.disney.disneyplus" />
     </queries>
 
     <application
         android:allowBackup="true"
+        android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
+        android:resizeableActivity="true"
         android:theme="@style/Theme.Autodash">
 
-        <!-- Android Auto: the car-screen dashboard and browser (listed when installed from Google
-             Play, like AutoDeck), and Autodash Radio as a media app (listed even when sideloaded). -->
-        <meta-data
-            android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" />
-        <meta-data
-            android:name="androidx.car.app.minCarApiLevel"
-            android:value="2" />
-
         <activity
-            android:name=".phone.MainActivity"
-            android:exported="true">
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|keyboard|navigation|uiMode|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- The full-screen dashboard; also has its own launcher icon for one-tap start. -->
-        <activity
-            android:name=".phone.DashActivity"
-            android:exported="true"
-            android:label="Autodash Dashboard"
-            android:screenOrientation="sensorLandscape"
-            android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:theme="@style/Theme.Autodash.Fullscreen">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <activity
-            android:name=".phone.BrowserActivity"
-            android:exported="true"
-            android:label="Autodash Browser"
-            android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
-            android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" />
-                <data android:scheme="https" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="text/plain" />
-            </intent-filter>
-        </activity>
-        <activity android:name=".phone.AppsActivity" android:label="@string/all_apps" />
-        <activity android:name=".phone.StationsActivity" android:label="@string/stations" />
-        <activity android:name=".phone.DockPickerActivity" android:label="Shortcuts" />
-        <activity android:name=".phone.LayoutEditorActivity" android:label="Dashboard layout" />
 
         <service
-            android:name=".car.DashCarAppService"
+            android:name=".MediaNotificationListener"
             android:exported="true"
-            android:label="Autodash">
-            <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <category android:name="androidx.car.app.category.NAVIGATION" />
-            </intent-filter>
-        </service>
-
-        <!-- Radio playback, and the "Autodash Radio" media app in Android Auto. The steering
-             wheel's next/previous buttons change station. -->
-        <service
-            android:name=".core.PlaybackService"
-            android:exported="true"
-            android:label="Autodash Radio"
-            android:foregroundServiceType="mediaPlayback">
-            <intent-filter>
-                <action android:name="androidx.media3.session.MediaLibraryService" />
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name=".core.NowPlayingListener"
-            android:exported="true"
-            android:label="@string/app_name"
+            android:label="Autodash Media Bridge"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
 
-        <receiver
-            android:name=".core.BluetoothReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
-            </intent-filter>
-        </receiver>
-
-        <receiver
-            android:name=".phone.InstallReceiver"
-            android:exported="false" />
     </application>
 </manifest>

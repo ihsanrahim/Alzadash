@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -8,16 +9,16 @@ android {
     compileSdk = 35
 
     defaultConfig {
+        // Same id as the earlier Autodash, so this installs over it.
         applicationId = "com.autodash"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "2.0"
     }
 
-    // Release signing comes from GitHub Actions secrets (see README). Without them the
-    // build falls back to the debug key, which still installs but can't update over a
-    // build signed with a different key.
+    // Release signing comes from GitHub Actions secrets (same key as AlzaDash). Without them
+    // the build falls back to the debug key, which installs but can't update a signed build.
     val keystorePath = System.getenv("SIGNING_KEYSTORE")
     signingConfigs {
         if (keystorePath != null) {
@@ -38,6 +39,9 @@ android {
         }
     }
 
+    buildFeatures {
+        compose = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -48,12 +52,12 @@ android {
 }
 
 dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.car.app:app:1.4.0")
-    implementation("androidx.car.app:app-projected:1.4.0")
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
-    implementation("androidx.media3:media3-session:1.4.1")
+    implementation("androidx.webkit:webkit:1.12.1")
 }

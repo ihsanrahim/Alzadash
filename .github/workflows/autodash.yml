@@ -46,7 +46,7 @@ jobs:
         run: |
           chmod +x gradlew
           set -o pipefail
-          ./gradlew --no-daemon assembleRelease bundleRelease 2>&1 | tee build.log
+          ./gradlew --no-daemon assembleRelease 2>&1 | tee build.log
 
       - name: Show build errors
         if: failure()
@@ -60,14 +60,11 @@ jobs:
       - name: Rename APK
         run: |
           cp app/build/outputs/apk/release/app-release.apk Autodash.apk
-          cp app/build/outputs/bundle/release/app-release.aab Autodash.aab
 
       - uses: actions/upload-artifact@v4
         with:
           name: Autodash
-          path: |
-            autodash/Autodash.apk
-            autodash/Autodash.aab
+          path: autodash/Autodash.apk
 
       # Its own release, separate from AlzaDash's "latest".
       - name: Publish to the "autodash-latest" release
@@ -76,8 +73,6 @@ jobs:
           tag_name: autodash-latest
           target_commitish: ${{ github.sha }}
           name: Autodash (latest build)
-          body: Autodash.apk installs as a normal app (phone dashboard, browser, Autodash Radio in Android Auto). Autodash.aab is for Google Play internal testing, which also puts the dashboard and browser on the car screen.
-          files: |
-            autodash/Autodash.apk
-            autodash/Autodash.aab
+          body: Autodash.apk installs as a normal app on the phone or an Android head unit (home-screen dashboard with movable widgets and a browser that only shows while parked). It does not appear inside Android Auto.
+          files: autodash/Autodash.apk
           make_latest: false
