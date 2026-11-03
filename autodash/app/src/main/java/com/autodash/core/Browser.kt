@@ -9,7 +9,7 @@ import org.json.JSONObject
 /** A saved website. */
 data class Bookmark(val title: String, val url: String)
 
-/** Settings and bookmarks for the built-in browser on the car screen. */
+/** Settings and bookmarks shared by the phone browser and the car-screen browser. */
 object Browser {
     const val HOME = "autodash://home"
 
@@ -55,8 +55,32 @@ object Browser {
     fun removeBookmark(context: Context, url: String) =
         saveBookmarks(context, bookmarks(context).filter { it.url != url })
 
+    /** Pages sent from the phone to the car browser, newest first. */
+    fun fromPhone(context: Context): List<Bookmark> {
+        val raw = sp(context).getString("from_phone", null) ?: return emptyList()
+        val arr = JSONArray(raw)
+        return (0 until arr.length()).map { arr.getJSONObject(it).let { o -> Bookmark(o.getString("title"), o.getString("url")) } }
+    }
+
+    fun addFromPhone(context: Context, b: Bookmark) {
+        val list = (listOf(b) + fromPhone(context).filter { it.url != b.url }).take(8)
+        val arr = JSONArray()
+        list.forEach { arr.put(JSONObject().put("title", it.title).put("url", it.url)) }
+        sp(context).edit().putString("from_phone", arr.toString()).apply()
+    }
+
     fun adBlock(context: Context) = sp(context).getBoolean("browser_adblock", true)
     fun setAdBlock(context: Context, on: Boolean) = sp(context).edit().putBoolean("browser_adblock", on).apply()
+    /** Page text size in percent, for reading on the car screen. */
+    fun textZoom(context: Context) = sp(context).getInt("browser_text_zoom", 100)
+    fun setTextZoom(context: Context, percent: Int) = sp(context).edit().putInt("browser_text_zoom", percent).apply()
+
+    /**
+     * Desktop mode pretends to be desktop Firefox (as AutoDeck does): sites such as YouTube then
+     * serve their full page without "open the app" prompts.
+     */
+    const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
+
     fun desktop(context: Context) = sp(context).getBoolean("browser_desktop", false)
     fun setDesktop(context: Context, on: Boolean) = sp(context).edit().putBoolean("browser_desktop", on).apply()
 

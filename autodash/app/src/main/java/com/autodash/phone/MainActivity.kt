@@ -98,6 +98,13 @@ class MainActivity : AppCompatActivity() {
                         .putExtra(BrowserActivity.EXTRA_URL, Browser.toUrl(box.text.toString())))
                     box.setText("")
                 },
+                smallButton("Send to car") {
+                    val text = box.text.toString().trim()
+                    if (text.isEmpty()) toast("Type a web address or search first") else {
+                        BrowserActivity.sendToCar(this, Bookmark(text.take(40), Browser.toUrl(text)))
+                        box.setText("")
+                    }
+                },
                 smallButton("Bookmark") {
                     val text = box.text.toString().trim()
                     if (text.isEmpty()) toast("Type a web address first") else {
@@ -161,9 +168,9 @@ class MainActivity : AppCompatActivity() {
 
         section(col, "HELP", false) {
             it.addView(note(
-                "Autodash is a normal app: install the APK and it works. No Shizuku or KingInstaller.\n\n" +
+                "Autodash needs no Shizuku or KingInstaller.\n\n" +
                     "Mount your phone in landscape and tap Open dashboard (or the Autodash Dashboard icon). Shortcut apps open on the phone as usual.\n\n" +
-                    "On the car screen, Android Auto shows Autodash Radio in its media apps. Android Auto doesn't list sideloaded dashboard apps, so the dashboard itself runs on the phone.\n\n" +
+                    "Car screen: Autodash has the dashboard and a browser for the Alza screen, drawn the same way AutoDeck does it. Android Auto only lists that part when Autodash was installed from Google Play (internal testing works). Installed as a plain APK, Android Auto shows Autodash Radio instead.\n\n" +
                     "The browser hides the page while the car is moving; sound keeps playing and the page comes back when you stop."
             ))
         }
@@ -272,6 +279,7 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_COARSE_LOCATION,
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.READ_CALENDAR,
+            "com.google.android.gms.permission.CAR_SPEED",
         )
         if (Build.VERSION.SDK_INT >= 31) perms += Manifest.permission.BLUETOOTH_CONNECT
         if (Build.VERSION.SDK_INT >= 33) perms += Manifest.permission.POST_NOTIFICATIONS

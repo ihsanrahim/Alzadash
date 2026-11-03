@@ -14,6 +14,10 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Android Auto: a navigation app may draw its own screen (dashboard and browser). -->
+    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
+    <uses-permission android:name="com.google.android.gms.permission.CAR_SPEED" />
 
     <queries>
         <intent>
@@ -49,11 +53,14 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.Autodash">
 
-        <!-- Android Auto: Autodash Radio as a media app. Sideloaded media apps are listed;
-             sideloaded template (dashboard) apps are not, so there is no car-screen dashboard. -->
+        <!-- Android Auto: the car-screen dashboard and browser (listed when installed from Google
+             Play, like AutoDeck), and Autodash Radio as a media app (listed even when sideloaded). -->
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="2" />
 
         <activity
             android:name=".phone.MainActivity"
@@ -101,6 +108,16 @@
         <activity android:name=".phone.StationsActivity" android:label="@string/stations" />
         <activity android:name=".phone.DockPickerActivity" android:label="Shortcuts" />
         <activity android:name=".phone.LayoutEditorActivity" android:label="Dashboard layout" />
+
+        <service
+            android:name=".car.DashCarAppService"
+            android:exported="true"
+            android:label="Autodash">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.NAVIGATION" />
+            </intent-filter>
+        </service>
 
         <!-- Radio playback, and the "Autodash Radio" media app in Android Auto. The steering
              wheel's next/previous buttons change station. -->

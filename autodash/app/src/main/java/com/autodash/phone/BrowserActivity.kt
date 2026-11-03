@@ -329,6 +329,7 @@ class BrowserActivity : AppCompatActivity() {
     private fun showMenu(anchor: View) {
         val menu = PopupMenu(this, anchor)
         menu.menu.add(0, 1, 0, "Bookmarks")
+        menu.menu.add(0, 7, 0, "Send to car screen")
         menu.menu.add(0, 2, 1, "Share page")
         menu.menu.add(0, 3, 2, "Open in another app")
         menu.menu.add(0, 4, 3, "Desktop site").apply { isCheckable = true; isChecked = Browser.desktop(this@BrowserActivity) }
@@ -337,6 +338,7 @@ class BrowserActivity : AppCompatActivity() {
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> showBookmarks()
+                7 -> currentPage()?.let { sendToCar(this, it) } ?: toast("Open a page first")
                 2 -> currentPage()?.let {
                     startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain")
                         .putExtra(Intent.EXTRA_TEXT, it.url), "Share"))
@@ -386,7 +388,7 @@ class BrowserActivity : AppCompatActivity() {
 
     private fun applyDesktop() {
         val desktop = Browser.desktop(this)
-        web.settings.userAgentString = if (desktop) DESKTOP_UA else null
+        web.settings.userAgentString = if (desktop) Browser.DESKTOP_UA else null
         web.settings.loadWithOverviewMode = desktop
     }
 
@@ -476,8 +478,18 @@ class BrowserActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_URL = "url"
+
+        /** Opens the page on the car screen if it's connected, and keeps it in the car's "From phone" list. */
+        fun sendToCar(context: android.content.Context, page: Bookmark) {
+            Browser.addFromPhone(context, page)
+            val car = com.autodash.car.CarSurface.active?.get()
+            if (car != null) {
+                car.openUrl(page.url)
+                Toast.makeText(context, "Opened on the car screen", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Saved. Find it under Sites in the car browser.", Toast.LENGTH_LONG).show()
+            }
+        }
         private const val MOVING_KMH = 10f
-        private const val DESKTOP_UA =
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
     }
 }
