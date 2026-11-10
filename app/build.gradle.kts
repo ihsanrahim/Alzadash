@@ -5,15 +5,15 @@ plugins {
 
 android {
     namespace = "com.alzadash"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // The Play Store copy uses its own ID (-PappId=com.autodash.myapp); the sideloaded APK keeps com.alzadash.
         applicationId = (project.findProperty("appId") as String?) ?: "com.alzadash"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 15
-        versionName = "4.11"
+        targetSdk = 36
+        versionCode = 16
+        versionName = "4.12"
     }
 
     // Release signing comes from GitHub Actions secrets (see README). Without them the
