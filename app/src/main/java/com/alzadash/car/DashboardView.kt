@@ -732,6 +732,392 @@ class DashboardView(context: Context) : View(context) {
 
     /** White round button with ⏸ while [playing], else ▶. */
     private fun drawPlayButton(c: Canvas, play: RectF, playing: Boolean) {
+        c.drawOval(play, text)
+        val dark = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK }
+        if (playing) {
+            val bw = play.width() * 0.1f
+            c.drawRect(play.centerX() - bw * 1.6f, play.centerY() - bw * 2, play.centerX() - bw * 0.6f, play.centerY() + bw * 2, dark)
+            c.drawRect(play.centerX() + bw * 0.6f, play.centerY() - bw * 2, play.centerX() + bw * 1.6f, play.centerY() + bw * 2, dark)
+        } else {
+            val tri = android.graphics.Path()
+            val s = play.width() * 0.18f
+            tri.moveTo(play.centerX() - s * 0.7f, play.centerY() - s)
+            tri.lineTo(play.centerX() + s, play.centerY())
+            tri.lineTo(play.centerX() - s * 0.7f, play.centerY() + s)
+            tri.close()
+            c.drawPath(tri, dark)
+        }
+    }
+
+    private fun drawGlance(canvas: Canvas, body: RectF, lines: List<LyricLine>, cur: Int, u: Float) {
+        warm.textSize = u * 0.85f
+        warm.typeface = bold
+        val nowText = if (cur < 0) "♪" else lines[cur].text.ifBlank { "♪" }
+        val now = ellipsize(nowText, warm, body.width())
+        canvas.drawText(now, body.centerX() - warm.measureText(now) / 2, body.centerY(), warm)
+        warm.typeface = Typeface.DEFAULT
+        lines.getOrNull(cur + 1)?.let {
+            dim.textSize = u * 0.55f
+            val next = ellipsize(it.text, dim, body.width())
+            canvas.drawText(next, body.centerX() - dim.measureText(next) / 2, body.centerY() + u * 1.1f, dim)
+        }
+    }
+
+    /**
+     * Every line, long ones wrapped. Timed lyrics keep the line being sung a third of the way
+     * down; untimed ones scroll along with the song's progress. A hand scroll pauses that for
+     * a few seconds.
+     */
+    private fun drawAllLines(canvas: Canvas, body: RectF, lines: List<LyricLine>, cur: Int, t: Track, u: Float) {
+        val lh = u * 0.8f
+        // Each lyric line as one or more screen rows, measured at the size it is drawn.
+        val rows = mutableListOf<Pair<Int, String>>()
+        val firstRow = IntArray(lines.size)
+        lines.forEachIndexed { i, line ->
+            val p = if (i == cur) warm else text
+            p.typeface = if (i == cur) bold else Typeface.DEFAULT
+            p.textSize = if (i == cur) u * 0.6f else u * 0.5f
+            firstRow[i] = rows.size
+            wrap(line.text.ifBlank { if (line.atMs >= 0) "♪" else "" }, p, body.width()).forEach { rows += i to it }
+        }
+        val total = rows.size * lh
+        val maxScroll = maxOf(0f, total - body.height() / 2)
+        val follow = System.currentTimeMillis() - lyricsTouchedAt > 5000
+        if (follow) {
+            if (cur >= 0) lyricsScroll = firstRow[cur] * lh - body.height() / 3
+            else if (lines[0].atMs < 0 && t.durationMs > 0) {
+                lyricsScroll = (total - body.height()).coerceAtLeast(0f) * (t.positionMs.toFloat() / t.durationMs).coerceIn(0f, 1f)
+            }
+        }
+        lyricsScroll = lyricsScroll.coerceIn(0f, maxScroll)
+        canvas.save()
+        canvas.clipRect(body)
+        rows.forEachIndexed { k, (i, s) ->
+            val y = body.top + lh + k * lh - lyricsScroll
+            if (y < body.top || y > body.bottom + lh) return@forEachIndexed
+            val p = if (i == cur) warm else if (cur >= 0 && i < cur) dim else text
+            p.typeface = if (i == cur) bold else Typeface.DEFAULT
+            p.textSize = if (i == cur) u * 0.6f else u * 0.5f
+            canvas.drawText(s, body.left, y, p)
+        }
+        canvas.restore()
+        warm.typeface = Typeface.DEFAULT
+        text.typeface = Typeface.DEFAULT
+    }
+
+    /** Breaks [s] at spaces into rows no wider than [max]; a single long word is cut with "…". */
+    private fun wrap(s: String, p: Paint, max: Float): List<String> {
+        if (p.measureText(s) <= max) return listOf(s)
+        val out = mutableListOf<String>()
+        var row = ""
+        for (word in s.split(' ')) {
+            val tryRow = if (row.isEmpty()) word else "$row $word"
+            if (p.measureText(tryRow) <= max || row.isEmpty()) row = tryRow
+            else { out += ellipsize(row, p, max); row = word }
+        }
+        if (row.isNotEmpty()) out += ellipsize(row, p, max)
+        return out
+    }
+
+    /** Compact solat card: next prayer and countdown on one line, today's times underneath in [cols] columns. */
+    private fun drawPrayer(canvas: Canvas, r: RectF, lat: Double, lng: Double, u: Float, cols: Int) {
+        val now = System.currentTimeMillis()
+        val next = Prayer.next(lat, lng, now)
+        val fmt = DateFormat.getTimeFormat(context)
+        val x = r.left + u * 0.4f
+        val left = (next.atMillis - now).coerceAtLeast(0) / 1000
+        text.typeface = bold
+        text.textSize = u * 0.5f
+        val head = "${next.name} ${fmt.format(Date(next.atMillis))}"
+        canvas.drawText(head, x, r.top + u * 0.75f, text)
+        warm.textSize = u * 0.5f
+        canvas.drawText(
+            String.format(Locale.US, "−%d:%02d:%02d", left / 3600, left / 60 % 60, left % 60),
+            x + text.measureText(head) + u * 0.35f, r.top + u * 0.75f, warm,
+        )
+        val times = Prayer.forDay(lat, lng, Calendar.getInstance())
+        val colW = (r.width() - u * 0.8f) / cols
+        times.forEachIndexed { i, p ->
+            val paint = if (p.name == next.name) warm else dim
+            paint.textSize = u * 0.28f
+            canvas.drawText("${p.name} ${fmt.format(Date(p.atMillis))}", x + (i % cols) * colW, r.top + u * 1.25f + (i / cols) * u * 0.42f, paint)
+        }
+    }
+
+    private fun drawWeather(canvas: Canvas, r: RectF, u: Float) {
+        val w = Weather.now
+        val x = r.left + u * 0.5f
+        if (w == null) {
+            dim.textSize = u * 0.45f
+            canvas.drawText("Weather loading…", x, r.centerY() + u * 0.15f, dim)
+            return
+        }
+        text.typeface = Typeface.DEFAULT
+        text.textSize = u * 1.0f
+        canvas.drawText(w.icon, x, r.top + u * 1.35f, text)
+        text.typeface = bold
+        text.textSize = u * 1.0f
+        val tx = x + u * 1.5f
+        val temp = String.format(Locale.US, "%.0f°", w.tempC)
+        canvas.drawText(temp, tx, r.top + u * 1.35f, text)
+        val lx = tx + text.measureText(temp) + u * 0.4f
+        text.typeface = Typeface.DEFAULT
+        text.textSize = u * 0.45f
+        canvas.drawText(w.label, lx, r.top + u * 0.95f, text)
+        dim.textSize = u * 0.38f
+        canvas.drawText(String.format(Locale.US, "H %.0f°  L %.0f°", w.highC, w.lowC), lx, r.top + u * 1.5f, dim)
+    }
+
+    /**
+     * The shortcut bar. From the top: the apps button (its apps fold out sideways when tapped),
+     * then at the foot the four quick buttons, phone mirroring and ⚙ settings.
+     */
+    private fun drawDock(canvas: Canvas, l: Float, t: Float, r: Float, b: Float, u: Float) {
+        // Laid out down the bar, or across it when the bar was made wide in the layout editor.
+        val across = r - l > b - t
+        val thick = if (across) b - t else r - l
+        fun slotFromEnd(n: Float, size: Float) =
+            if (across) RectF(r - n - size, t, r - n, b) else RectF(l, b - n - size, r, b - n)
+        val gear = slotFromEnd(0f, thick)
+        settingsRect.set(gear)
+        canvas.drawRoundRect(RectF(l, t, r, b), thick * 0.25f, thick * 0.25f, card)
+        drawGear(canvas, gear)
+        mirrorRect.set(slotFromEnd(thick, thick * 0.85f))
+        drawIcon(canvas, com.alzadash.R.drawable.ic_mirror, mirrorRect, 0.5f)
+        val quick = slotFromEnd(thick * 1.85f, thick)
+        drawQuick(canvas, quick)
+
+        // Apps that open on the car screen (they need Shizuku) sit behind one button.
+        val apps = if (across) RectF(l, t, l + thick, b) else RectF(l, t, r, t + thick)
+        appsRect.set(apps)
+        if (dockOpen) canvas.drawRoundRect(apps, thick * 0.25f, thick * 0.25f, bar)
+        drawIcon(canvas, com.alzadash.R.drawable.ic_apps, apps, 0.45f)
+        if (!dockOpen) return
+        if (System.currentTimeMillis() - dockLoadedAt > 15_000) {
+            dockApps = Dock.load(context)
+            dockLoadedAt = System.currentTimeMillis()
+        }
+        val list = dockApps
+        val gap = thick * 0.15f
+        val n = maxOf(list.size, 1)
+        // Folds out to the left of the bar (or upward from a bar laid across the bottom), in one row.
+        val panel = if (across) RectF(apps.left, apps.top - gap - thick, apps.left + n * thick, apps.top - gap)
+        else RectF(apps.left - gap - n * thick, apps.top, apps.left - gap, apps.bottom)
+        if (panel.left < 0) panel.offset(-panel.left, 0f)
+        panelRect.set(panel)
+        canvas.drawRoundRect(panel, thick * 0.25f, thick * 0.25f, solidCard)
+        if (list.isEmpty()) {
+            dim.textSize = thick * 0.2f
+            val msg = "Pick apps in the phone app"
+            canvas.drawText(ellipsize(msg, dim, panel.width() - thick * 0.2f), panel.left + thick * 0.1f, panel.centerY() + thick * 0.07f, dim)
+            return
+        }
+        val size = thick * 0.62f
+        list.forEachIndexed { i, app ->
+            val cx = panel.left + thick * i + thick / 2
+            val cy = panel.centerY()
+            val rect = RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
+            dockRects += RectF(cx - thick / 2, panel.top, cx + thick / 2, panel.bottom) to app
+            val icon = icons.getOrPut(app.pkg) { Dock.icon(context, app) }
+            if (icon != null) {
+                icon.setBounds(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
+                icon.draw(canvas)
+            } else {
+                canvas.drawOval(rect, bar)
+                text.typeface = bold
+                text.textSize = size * 0.45f
+                val letter = app.label.take(1)
+                canvas.drawText(letter, cx - text.measureText(letter) / 2, cy + size * 0.16f, text)
+            }
+        }
+    }
+
+    private fun drawIcon(canvas: Canvas, res: Int, r: RectF, frac: Float) {
+        val icon = quickIcons.getOrPut("res$res") {
+            try { context.getDrawable(res)?.mutate()?.apply { setTint(Color.WHITE) } } catch (_: Exception) { null }
+        } ?: return
+        val size = min(r.width(), r.height()) * frac * Look.buttonScale(context)
+        icon.setBounds((r.centerX() - size / 2).toInt(), (r.centerY() - size / 2).toInt(),
+            (r.centerX() + size / 2).toInt(), (r.centerY() + size / 2).toInt())
+        icon.draw(canvas)
+    }
+
+
+    // ---------- Newer widgets ----------
+
+
+    /** Next events from the phone's calendar: day, time and title. */
+    private fun drawCalendar(c: Canvas, r: RectF, u: Float) {
+        c.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
+        val x = r.left + u * 0.4f
+        val w = r.width() - u * 0.8f
+        if (!com.alzadash.core.CalendarEvents.allowed(context)) {
+            dim.textSize = u * 0.38f
+            c.drawText(ellipsize("Allow Calendar in the phone app", dim, w), x, r.centerY(), dim)
+            return
+        }
+        com.alzadash.core.CalendarEvents.refresh(context)
+        val events = com.alzadash.core.CalendarEvents.events
+        if (events.isNullOrEmpty()) {
+            dim.textSize = u * 0.4f
+            c.drawText(if (events == null) "Calendar loading…" else "Nothing coming up", x, r.centerY() + u * 0.15f, dim)
+            return
+        }
+        var y = r.top + u * 0.3f
+        var lastDay = ""
+        for (e in events) {
+            val day = com.alzadash.core.CalendarEvents.dayLabel(e.begin, e.allDay)
+            if (day != lastDay) {
+                if (y + u * 0.5f > r.bottom) break
+                dim.textSize = u * 0.32f
+                y += u * 0.42f
+                c.drawText(day, x, y, dim)
+                lastDay = day
+            }
+            if (y + u * 0.55f > r.bottom - u * 0.1f) break
+            y += u * 0.5f
+            accent.textSize = u * 0.34f
+            val time = if (e.allDay) "All day" else DateFormat.getTimeFormat(context).format(Date(e.begin))
+            c.drawRect(x, y - u * 0.34f, x + u * 0.06f, y + u * 0.06f, accent)
+            c.drawText(time, x + u * 0.2f, y, accent)
+            text.typeface = bold
+            text.textSize = u * 0.36f
+            val tx = x + u * 0.2f + accent.measureText("00:00 pm") + u * 0.2f
+            c.drawText(ellipsize(e.title, text, r.right - u * 0.3f - tx), tx, y, text)
+        }
+    }
+
+    /** US AQI with its colour band, PM2.5, UV, humidity and wind. */
+    private fun drawAir(c: Canvas, r: RectF, u: Float) {
+        c.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
+        val cx = r.centerX()
+        dim.textSize = u * 0.4f
+        var y = r.top + u * 0.7f
+        center(c, "Air quality", cx, y, dim)
+        val aqi = com.alzadash.core.AirQuality.aqi
+        if (aqi == null) {
+            center(c, "Loading…", cx, r.centerY(), dim)
+            return
+        }
+        val (label, colour) = com.alzadash.core.AirQuality.band(aqi)
+        val big = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colour; typeface = bold; textSize = u * 1.3f }
+        y += u * 1.35f
+        center(c, aqi.toString(), cx, y, big)
+        text.typeface = bold
+        text.textSize = u * 0.36f
+        val pw = min(text.measureText(label) + u * 0.5f, r.width() - u * 0.4f)
+        val pill = RectF(cx - pw / 2, y + u * 0.2f, cx + pw / 2, y + u * 0.75f)
+        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colour; style = Paint.Style.STROKE; strokeWidth = u * 0.05f }
+        c.drawRoundRect(pill, pill.height() / 2, pill.height() / 2, stroke)
+        center(c, ellipsize(label, text, pw - u * 0.2f), cx, pill.bottom - u * 0.15f, text)
+        y = pill.bottom + u * 0.15f
+        val w = Weather.now
+        val lines = listOfNotNull(
+            com.alzadash.core.AirQuality.pm25?.let { String.format(Locale.US, "PM2.5 %.0f", it) },
+            w?.uv?.takeIf { !it.isNaN() }?.let { String.format(Locale.US, "UV %.0f %s", it, uvWord(it)) },
+            w?.humidity?.takeIf { !it.isNaN() }?.let { String.format(Locale.US, "Humidity %.0f%%", it) },
+            w?.windKmh?.takeIf { !it.isNaN() }?.let { String.format(Locale.US, "Wind %.0f km/h", it) },
+        )
+        text.typeface = Typeface.DEFAULT
+        text.textSize = u * 0.36f
+        for (line in lines) {
+            y += u * 0.5f
+            if (y > r.bottom - u * 0.1f) break
+            center(c, ellipsize(line, text, r.width() - u * 0.3f), cx, y, text)
+        }
+    }
+
+    private fun uvWord(uv: Double) = when {
+        uv < 3 -> "Low"
+        uv < 6 -> "Moderate"
+        uv < 8 -> "High"
+        else -> "Very high"
+    }
+
+    private fun center(c: Canvas, s: String, cx: Float, y: Float, p: Paint) = c.drawText(s, cx - p.measureText(s) / 2, y, p)
+
+    /** Live rain radar around the car on a small map. */
+    private fun drawRadar(c: Canvas, r: RectF, u: Float, lat: Double, lng: Double) {
+        c.drawRoundRect(r, u * 0.3f, u * 0.3f, card)
+        com.alzadash.core.Radar.refresh(lat, lng)
+        val img = com.alzadash.core.Radar.image
+        if (img == null) {
+            dim.textSize = u * 0.4f
+            center(c, "Rain radar loading…", r.centerX(), r.centerY(), dim)
+            return
+        }
+        // Crop the picture around the car to fill the widget.
+        val scale = maxOf(r.width() / img.width, r.height() / img.height) * 1.4f
+        val dx = r.centerX() - com.alzadash.core.Radar.dotX * scale
+        val dy = r.centerY() - com.alzadash.core.Radar.dotY * scale
+        c.save()
+        val clip = android.graphics.Path().apply { addRoundRect(r, u * 0.3f, u * 0.3f, android.graphics.Path.Direction.CW) }
+        c.clipPath(clip)
+        c.drawBitmap(img, null, RectF(dx, dy, dx + img.width * scale, dy + img.height * scale), bgPaint)
+        c.restore()
+        val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ACCENT }
+        c.drawCircle(r.centerX(), r.centerY(), u * 0.18f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
+        c.drawCircle(r.centerX(), r.centerY(), u * 0.12f, dot)
+        val label = "Rain radar · " + DateFormat.getTimeFormat(context).format(Date(com.alzadash.core.Radar.takenAt))
+        text.typeface = bold
+        text.textSize = u * 0.3f
+        val bg = RectF(r.left + u * 0.15f, r.top + u * 0.15f, r.left + u * 0.45f + text.measureText(label), r.top + u * 0.6f)
+        c.drawRoundRect(bg, u * 0.1f, u * 0.1f, shade)
+        c.drawText(label, bg.left + u * 0.15f, bg.bottom - u * 0.13f, text)
+        val credit = "© OpenStreetMap · RainViewer"
+        dim.textSize = u * 0.2f
+        c.drawText(credit, r.right - u * 0.15f - dim.measureText(credit), r.bottom - u * 0.12f, dim)
+    }
+
+    /** Album art, song, progress and ◀ ⏯ ▶ for whichever music app is playing (or paused). */
+    private fun drawPlayer(c: Canvas, r: RectF, u: Float) {
+        c.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
+        val t = NowPlaying.readAny(context)
+        val pad = u * 0.35f
+        val artSize = min(r.height() - pad * 2, r.width() * 0.35f)
+        val art = RectF(r.left + pad, r.centerY() - artSize / 2, r.left + pad + artSize, r.centerY() + artSize / 2)
+        val bmp = if (t != null) NowPlaying.art(context) else null
+        if (bmp != null) {
+            c.save()
+            c.clipPath(android.graphics.Path().apply { addRoundRect(art, u * 0.25f, u * 0.25f, android.graphics.Path.Direction.CW) })
+            val sc = maxOf(art.width() / bmp.width, art.height() / bmp.height)
+            val w = bmp.width * sc
+            val h = bmp.height * sc
+            c.drawBitmap(bmp, null, RectF(art.centerX() - w / 2, art.centerY() - h / 2, art.centerX() + w / 2, art.centerY() + h / 2), bgPaint)
+            c.restore()
+        } else {
+            c.drawRoundRect(art, u * 0.25f, u * 0.25f, shade)
+            text.typeface = Typeface.DEFAULT
+            text.textSize = artSize * 0.3f
+            center(c, "♪", art.centerX(), art.centerY() + artSize * 0.1f, text)
+        }
+        val x = art.right + pad
+        val w = r.right - pad - x
+        if (w < u) return
+        dim.textSize = u * 0.32f
+        c.drawText(ellipsize(t?.let { appName(it.pkg) } ?: "Music", dim, w), x, r.top + u * 0.75f, dim)
+        text.typeface = bold
+        text.textSize = u * 0.5f
+        c.drawText(ellipsize(t?.title ?: "Nothing playing", text, w), x, r.top + u * 1.35f, text)
+        if (t != null && t.artist.isNotEmpty()) {
+            dim.textSize = u * 0.36f
+            c.drawText(ellipsize(t.artist, dim, w), x, r.top + u * 1.8f, dim)
+        }
+        // Progress bar.
+        val by = r.top + u * 2.15f
+        c.drawRoundRect(RectF(x, by, x + w, by + u * 0.08f), u * 0.04f, u * 0.04f, shade)
+        if (t != null && t.durationMs > 0) {
+            val f = (t.positionMs.toFloat() / t.durationMs).coerceIn(0f, 1f)
+            c.drawRoundRect(RectF(x, by, x + w * f, by + u * 0.08f), u * 0.04f, u * 0.04f, text)
+        }
+        // ◀ ⏯ ▶
+        val b = min(u * 0.75f, (r.bottom - by - u * 0.3f)).coerceAtLeast(u * 0.4f) * Look.buttonScale(context)
+        val cy = (by + r.bottom) / 2 + u * 0.05f
+        val prev = RectF(x, cy - b / 2, x + b, cy + b / 2)
+        val play = RectF(prev.right + u * 0.3f, cy - b * 0.6f, prev.right + u * 0.3f + b * 1.2f, cy + b * 0.6f)
+        val next = RectF(play.right + u * 0.3f, cy - b / 2, play.right + u * 0.3f + b, cy + b / 2)
+        drawStepButton(c, prev, -1)
+        drawStepButton(c, next, 1)
         drawPlayButton(c, play, t?.playing == true)
         playerRects += prev to -1
         playerRects += play to 0
