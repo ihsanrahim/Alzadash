@@ -31,7 +31,7 @@ object VoiceCommands {
 
     fun listen(context: Context, target: CommandTarget) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            target.say("Allow the microphone in the AlzaDash app on your phone first")
+            target.say("Allow the microphone in the Autodash app on your phone first")
             return
         }
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
@@ -73,7 +73,7 @@ object VoiceCommands {
     /** Listens once and hands back the words as text, for typing into apps on the car screen. */
     fun dictate(context: Context, onText: (String) -> Unit, fail: (String) -> Unit) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            fail("Allow the microphone in the AlzaDash app on your phone first")
+            fail("Allow the microphone in the Autodash app on your phone first")
             return
         }
         recognizer?.destroy()

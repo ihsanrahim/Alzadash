@@ -193,7 +193,7 @@ object News {
         c.connectTimeout = 8000
         c.readTimeout = 10000
         c.instanceFollowRedirects = true
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AlzaDash")
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) Autodash")
         return c
     }
 

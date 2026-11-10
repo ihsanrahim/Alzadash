@@ -58,7 +58,7 @@ class NewsPage(private val context: Context) {
         // Header: name, sections, clock and close.
         white.typeface = bold
         white.textSize = u * 0.5f
-        canvas.drawText("AlzaDash News", left, y + u * 0.55f, white)
+        canvas.drawText("Autodash News", left, y + u * 0.55f, white)
         val close = RectF(right - u * 0.8f, y, right, y + u * 0.8f)
         canvas.drawOval(close, panel)
         white.textSize = u * 0.4f

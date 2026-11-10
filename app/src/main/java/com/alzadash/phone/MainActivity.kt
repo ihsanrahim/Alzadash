@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity() {
         val accent = getColor(com.alzadash.R.color.accent)
 
         col.addView(TextView(this).apply {
-            text = "AlzaDash"
+            text = "Autodash"
             textSize = 22f
             setTypeface(typeface, android.graphics.Typeface.BOLD)
             setTextColor(android.graphics.Color.WHITE)
@@ -171,13 +171,13 @@ class MainActivity : AppCompatActivity() {
             it.addView(buttonRow(
                 smallButton("Mirror: taps") {
                     if (com.alzadash.mirror.MirrorTouch.enabled(this)) toast("Already on") else {
-                        toast("Find AlzaDash car mirroring and turn it on. If it's greyed out: Settings > Apps > AlzaDash > ⋮ > Allow restricted settings")
+                        toast("Find Autodash car mirroring and turn it on. If it's greyed out: Settings > Apps > Autodash > ⋮ > Allow restricted settings")
                         startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                     }
                 },
                 smallButton("Mirror: rotate") {
                     if (Settings.canDrawOverlays(this)) toast("Already allowed") else {
-                        toast("Allow AlzaDash to display over other apps")
+                        toast("Allow Autodash to display over other apps")
                         startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
                     }
                 },
@@ -192,7 +192,7 @@ class MainActivity : AppCompatActivity() {
 
         section(col, "HELP", false) {
             it.addView(note(
-                "Install updates with KingInstaller (Shizuku Trick) so Android Auto lists AlzaDash.\n\n" +
+                "Install updates with KingInstaller (Shizuku Trick) so Android Auto lists Autodash.\n\n" +
                     "Video and web pages on the car screen show only while the car is stopped; sound keeps playing.\n\n" +
                     "Opening real apps (YouTube, Spotify, Waze) on the car screen and typing into them need Shizuku running and allowed.\n\n" +
                     "Without Shizuku, use phone mirroring (the cast button above ⚙ on the car screen). Turn on Mirror: taps and Mirror: rotate in Setup once."
@@ -343,13 +343,13 @@ class MainActivity : AppCompatActivity() {
             toast("Already allowed")
             return
         }
-        toast("Turn on AlzaDash in the list")
+        toast("Turn on Autodash in the list")
         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
     }
 
     private fun installApk() {
         if (!packageManager.canRequestPackageInstalls()) {
-            toast("Allow AlzaDash to install apps, then tap Install APK again")
+            toast("Allow Autodash to install apps, then tap Install APK again")
             startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
             return
         }

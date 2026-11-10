@@ -128,7 +128,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
                 say("Start Shizuku on your phone to open the real ${app.label} app")
             }
             !Shell.running() -> say("Start Shizuku on your phone to open ${app.label} here")
-            else -> say("Tap Allow Shizuku in the AlzaDash phone app to open ${app.label} here")
+            else -> say("Tap Allow Shizuku in the Autodash phone app to open ${app.label} here")
         }
         invalidate()
     }
@@ -196,7 +196,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
 
     override fun showVideo(on: Boolean) {
         if (on) {
-            Dock.load(carContext).firstOrNull()?.let { openDock(it) } ?: say("Pick shortcut apps in the AlzaDash phone app")
+            Dock.load(carContext).firstOrNull()?.let { openDock(it) } ?: say("Pick shortcut apps in the Autodash phone app")
         } else {
             surface.setMode(Mode.DASH)
             invalidate()

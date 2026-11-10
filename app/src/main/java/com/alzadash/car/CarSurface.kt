@@ -64,7 +64,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
      */
     @Suppress("DEPRECATION")
     private val wake = carContext.getSystemService(PowerManager::class.java)
-        .newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "AlzaDash:carApp")
+        .newWakeLock(PowerManager.SCREEN_DIM_WAKE_LOCK, "Autodash:carApp")
         .apply { setReferenceCounted(false) }
 
     private val gate = object : Runnable {
@@ -93,7 +93,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         dpi = container.dpi
         if (height > 0) DashLayout.saveCarAspect(carContext, width.toFloat() / height)
         val dm = carContext.getSystemService(DisplayManager::class.java)
-        val vd = dm.createVirtualDisplay("AlzaDash", width, height, container.dpi, surface, 0)
+        val vd = dm.createVirtualDisplay("Autodash", width, height, container.dpi, surface, 0)
         display = vd
         presentation = DashPresentation(carContext, vd.display).also {
             it.show()
@@ -245,7 +245,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         val vd = mapDisplay
         if (vd == null) {
             val dm = carContext.getSystemService(DisplayManager::class.java)
-            mapDisplay = dm.createVirtualDisplay("AlzaDash map", w, h, dpi, surface, 0)
+            mapDisplay = dm.createVirtualDisplay("Autodash map", w, h, dpi, surface, 0)
         } else {
             vd.resize(w, h, dpi)
             vd.surface = surface
@@ -405,7 +405,7 @@ class CarSurface(private val carContext: CarContext) : SurfaceCallback {
         val a = mirrorArea()
         if (!a.contains(x.toInt(), y.toInt())) return
         val p = Mirror.toPhone(carContext, x - a.left, y - a.top, a.width(), a.height()) ?: return
-        if (!MirrorTouch.tap(p.x, p.y)) onMessage("Turn on AlzaDash in Accessibility on your phone to tap here")
+        if (!MirrorTouch.tap(p.x, p.y)) onMessage("Turn on Autodash in Accessibility on your phone to tap here")
     }
 
     private var scrollX = 0f

@@ -27,7 +27,7 @@ object RadioResolver {
                 val conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = 6000
                 conn.readTimeout = 6000
-                conn.setRequestProperty("User-Agent", "AlzaDash/1.0")
+                conn.setRequestProperty("User-Agent", "Autodash/1.0")
                 val body = conn.inputStream.bufferedReader().use { it.readText() }
                 val arr = JSONArray(body)
                 for (i in 0 until arr.length()) {

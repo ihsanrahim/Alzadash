@@ -27,7 +27,7 @@ class MirrorStartActivity : Activity() {
         if (resultCode == RESULT_OK && data != null) {
             startForegroundService(Intent(this, MirrorService::class.java).putExtra("code", resultCode).putExtra("data", data))
             if (!MirrorTouch.enabled(this)) {
-                Toast.makeText(this, "To tap from the car screen, turn on AlzaDash in Accessibility (AlzaDash phone app > Mirroring)", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "To tap from the car screen, turn on Autodash in Accessibility (Autodash phone app > Mirroring)", Toast.LENGTH_LONG).show()
             }
         }
         finish()

@@ -18,7 +18,7 @@ import rikka.shizuku.Shizuku
 object Input {
     @Volatile private var service: IInput? = null
     @Volatile private var binding = false
-    private val handler = Handler(HandlerThread("AlzaDash input").apply { start() }.looper)
+    private val handler = Handler(HandlerThread("Autodash input").apply { start() }.looper)
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {

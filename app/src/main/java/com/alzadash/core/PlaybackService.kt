@@ -22,7 +22,7 @@ import kotlin.concurrent.thread
 
 /**
  * Plays internet radio in the background. It is also a media library, so Android Auto lists
- * "AlzaDash Radio" as a media app: it can sit in the small half next to Waze, and the
+ * "Autodash Radio" as a media app: it can sit in the small half next to Waze, and the
  * steering wheel's next/previous buttons change station.
  */
 class PlaybackService : MediaLibraryService() {

@@ -110,7 +110,7 @@ object Standings {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000
         c.readTimeout = 15_000
-        c.setRequestProperty("User-Agent", "AlzaDash")
+        c.setRequestProperty("User-Agent", "Autodash")
         c.setRequestProperty("Accept", "application/json")
         return c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
     }

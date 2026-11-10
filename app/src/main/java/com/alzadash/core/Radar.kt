@@ -83,7 +83,7 @@ object Radar {
         connectTimeout = 8000
         readTimeout = 10000
         // OpenStreetMap asks every app to name itself.
-        setRequestProperty("User-Agent", "AlzaDash/4.9 (personal car dashboard)")
+        setRequestProperty("User-Agent", "Autodash/4.9 (personal car dashboard)")
     }
 
     private fun text(url: String) = open(url).inputStream.bufferedReader().use { it.readText() }

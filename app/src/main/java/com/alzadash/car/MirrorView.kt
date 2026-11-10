@@ -69,7 +69,7 @@ class MirrorView(context: Context) : FrameLayout(context) {
 
     private fun update() {
         val text = when {
-            !Mirror.active -> "Mirror your phone\n\nOn your phone, tap Start (choose \"Entire screen\").\nIf nothing pops up, tap the AlzaDash notification."
+            !Mirror.active -> "Mirror your phone\n\nOn your phone, tap Start (choose \"Entire screen\").\nIf nothing pops up, tap the Autodash notification."
             !TripTracker.isParked() -> if (TripTracker.speedKmh() == null) {
                 TripTracker.problem(context) + "\n\nThe phone's screen shows once the car is confirmed stopped."
             } else {

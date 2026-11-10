@@ -13,7 +13,7 @@ import com.alzadash.core.Radio
 /** Instant Radio: one tap on a saved station starts it. */
 class RadioScreen(carContext: CarContext) : Screen(carContext) {
     override fun onGetTemplate(): Template {
-        val list = ItemList.Builder().setNoItemsMessage("Add stations in the AlzaDash app on your phone")
+        val list = ItemList.Builder().setNoItemsMessage("Add stations in the Autodash app on your phone")
         if (Radio.isPlaying) {
             list.addItem(Row.Builder().setTitle("Stop radio").setOnClickListener {
                 Radio.stop(carContext)

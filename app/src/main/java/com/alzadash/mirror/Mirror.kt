@@ -51,7 +51,7 @@ object Mirror {
         val d = display
         if (d == null) {
             display = try {
-                p.createVirtualDisplay("AlzaDash mirror", w, h, dpi,
+                p.createVirtualDisplay("Autodash mirror", w, h, dpi,
                     DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null)
             } catch (_: Exception) {
                 null

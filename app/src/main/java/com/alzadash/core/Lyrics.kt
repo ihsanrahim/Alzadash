@@ -168,7 +168,7 @@ object Lyrics {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 8000
         c.readTimeout = 8000
-        c.setRequestProperty("User-Agent", "AlzaDash (https://github.com/ihsanrahim/Alzadash)")
+        c.setRequestProperty("User-Agent", "Autodash (https://github.com/ihsanrahim/Alzadash)")
         return c.inputStream.bufferedReader().use { it.readText() }.also { c.disconnect() }
     }
 }

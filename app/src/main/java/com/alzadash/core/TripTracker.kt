@@ -78,12 +78,12 @@ object TripTracker {
     fun problem(context: Context): String {
         val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
-        if (!fine) return "AlzaDash isn't allowed to use location. Open AlzaDash on your phone and tap Location."
+        if (!fine) return "Autodash isn't allowed to use location. Open Autodash on your phone and tap Location."
         val lm = context.getSystemService(LocationManager::class.java)
         if (lm != null && android.os.Build.VERSION.SDK_INT >= 28 && !lm.isLocationEnabled) return "Location is turned off on your phone."
         if (android.os.Build.VERSION.SDK_INT >= 29 && ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)
-            return "Location stops when the phone screen is off. In the AlzaDash phone app, tap Location and pick Allow all the time."
+            return "Location stops when the phone screen is off. In the Autodash phone app, tap Location and pick Allow all the time."
         return "Waiting for a GPS or car speed reading. A roof or car park can block GPS."
     }
 
