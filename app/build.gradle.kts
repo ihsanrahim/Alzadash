@@ -8,7 +8,8 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.alzadash"
+        // The Play Store copy uses its own ID (-PappId=com.autodash.myapp); the sideloaded APK keeps com.alzadash.
+        applicationId = (project.findProperty("appId") as String?) ?: "com.alzadash"
         minSdk = 26
         targetSdk = 35
         versionCode = 15

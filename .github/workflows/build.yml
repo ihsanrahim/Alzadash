@@ -72,6 +72,9 @@ jobs:
           chmod +x gradlew
           set -o pipefail
           ./gradlew --no-daemon assembleRelease bundleRelease 2>&1 | tee build.log
+          # Play Store bundle under the Play app's package name (re-signed with the RSA upload key before upload).
+          mkdir -p play && cp app/build/outputs/bundle/release/app-release.aab play/base.aab
+          ./gradlew --no-daemon bundleRelease -PappId=com.autodash.myapp 2>&1 | tee -a build.log
 
       # Put compile errors on the run's summary page so they can be read without opening the log.
       - name: Show build errors
@@ -87,7 +90,8 @@ jobs:
         run: |
           cp app/build/outputs/apk/release/app-release.apk AlzaDash.apk
           # The Play Store bundle is only useful when signed with the real key.
-          if [ -n "$SIGNING_KEYSTORE" ]; then cp app/build/outputs/bundle/release/app-release.aab AlzaDash.aab; fi
+          if [ -n "$SIGNING_KEYSTORE" ]; then cp play/base.aab AlzaDash.aab; fi
+          cp app/build/outputs/bundle/release/app-release.aab Autodash-play.aab
 
       - uses: actions/upload-artifact@v4
         with:
@@ -104,4 +108,5 @@ jobs:
           files: |
             AlzaDash.apk
             AlzaDash.aab
+            Autodash-play.aab
           make_latest: true
