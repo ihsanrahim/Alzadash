@@ -13,9 +13,7 @@ import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.core.graphics.drawable.IconCompat
 import com.alzadash.R
 import com.alzadash.core.CommandTarget
-import com.alzadash.core.Pkg
 import com.alzadash.core.Radio
-import com.alzadash.core.Shell
 import com.alzadash.core.Station
 import com.alzadash.core.TripTracker
 import com.alzadash.core.VoiceCommands
@@ -24,12 +22,10 @@ import com.alzadash.core.VoiceCommands
 class DashScreen(carContext: CarContext, private val surface: CarSurface) : Screen(carContext), CommandTarget {
 
     init {
-        surface.onDock = { app -> openDock(app) }
         surface.onRadioStep = { delta -> Radio.step(carContext, delta) { say(it) } }
         surface.onStation = { st -> Radio.play(carContext, st) { say(it) } }
         surface.onSettings = { screenManager.push(SettingsScreen(carContext)) }
         surface.onMessage = { say(it) }
-        surface.onYouTube = { kind -> openYouTube(kind) }
         surface.onQuick = { kind ->
             when (kind) {
                 "mic" -> VoiceCommands.listen(carContext, this)
@@ -43,12 +39,7 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             }
         }
         surface.onLinkOpened = { invalidate() }
-        surface.onOpenApp = { pkg ->
-            DashboardView.showLyrics(false)
-            val pm = carContext.packageManager
-            val label = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { pkg }
-            openDock(DockApp(label, pkg))
-        }
+        surface.onBrowserChanged = { invalidate() }
     }
 
     override fun onGetTemplate(): Template {
@@ -68,23 +59,11 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
                 strip.addAction(icon(R.drawable.ic_menu) { screenManager.push(BrowserMenuScreen(carContext, surface)) })
                 strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
             }
-            Mode.SPLIT -> {
-                strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
-                strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
-                strip.addAction(icon(R.drawable.ic_keyboard) { dictate() })
-                strip.addAction(icon(R.drawable.ic_radio) { screenManager.push(RadioScreen(carContext)) })
-            }
             Mode.MIRROR -> {
                 strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
                 strip.addAction(icon(R.drawable.ic_back) { surface.goBack() })
                 strip.addAction(icon(R.drawable.ic_home) { surface.mirrorHome() })
                 strip.addAction(icon(R.drawable.ic_mic) { VoiceCommands.listen(carContext, this) })
-            }
-            Mode.APP -> {
-                strip.addAction(icon(R.drawable.ic_dash) { showVideo(false) })
-                strip.addAction(icon(R.drawable.ic_back) { surface.goBack() })
-                strip.addAction(icon(R.drawable.ic_playpause) { surface.playPause() })
-                strip.addAction(icon(R.drawable.ic_keyboard) { dictate() })
             }
         }
         return NavigationTemplate.Builder().setActionStrip(strip.build()).build()
@@ -96,76 +75,13 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
             .setOnClickListener { onClick() }
             .build()
 
-    /**
-     * Waze on the left with the dashboard beside it. Without Shizuku this falls back to the
-     * old destination list, which hands over to Waze or Maps full screen.
-     */
-    private fun openMap() {
-        when {
-            !Shell.available() -> screenManager.push(GoScreen(carContext, this))
-            !surface.openSplit() -> say("Install Waze or Google Maps on your phone")
-            else -> invalidate()
-        }
-    }
+    /** Drive home, Google Maps, Waze, Gemini and trip reset. */
+    private fun openMap() = screenManager.push(GoScreen(carContext, this))
 
-    /** The built-in browser, opening on its start page of bookmarks. */
+    /** The built-in browser, opening on its start page of shortcuts. */
     fun openBrowser() {
         surface.openUrl(com.alzadash.core.Browser.HOME)
         invalidate()
-    }
-
-    /** A shortcut in the right-hand bar was tapped: open that app on the car screen. */
-    fun openDock(app: DockApp) {
-        val launch = carContext.packageManager.getLaunchIntentForPackage(app.pkg)?.component
-        when {
-            launch == null -> say("${app.label} isn't installed")
-            Shell.available() -> {
-                surface.openApp(launch.flattenToString())
-                if (!TripTracker.isParked()) say("${app.label} shows once you're parked. Sound keeps playing.")
-            }
-            app.label.lowercase().startsWith("youtube") && !app.label.lowercase().contains("music") -> {
-                surface.openUrl(DashPresentation.YOUTUBE)
-                say("Start Shizuku on your phone to open the real ${app.label} app")
-            }
-            !Shell.running() -> say("Start Shizuku on your phone to open ${app.label} here")
-            else -> say("Tap Allow Shizuku in the Autodash phone app to open ${app.label} here")
-        }
-        invalidate()
-    }
-
-    /**
-     * The YouTube card: search by voice, or jump to Home, Subscriptions or History. Opens in the
-     * YouTube app on the car screen with Shizuku, otherwise in the car browser. Video shows only when parked.
-     */
-    private fun openYouTube(kind: String) {
-        fun go(url: String) {
-            val pm = carContext.packageManager
-            val pkg = listOf(Pkg.YOUTUBE, "app.revanced.android.youtube", "app.morphe.android.youtube")
-                .firstOrNull { pm.getLaunchIntentForPackage(it) != null }
-            if (pkg != null && Shell.available()) {
-                surface.openApp("$pkg/", url)
-                if (!TripTracker.isParked()) say("YouTube shows once you're parked. Sound keeps playing.")
-            } else {
-                surface.openUrl(url.replace("://www.", "://m."))
-            }
-            invalidate()
-        }
-        when (kind) {
-            "search" -> VoiceCommands.dictate(carContext, { words ->
-                go("https://www.youtube.com/results?search_query=" + Uri.encode(words))
-            }, { say(it) })
-            "subs" -> go("https://www.youtube.com/feed/subscriptions")
-            "history" -> go("https://www.youtube.com/feed/history")
-            else -> go("https://www.youtube.com/")
-        }
-    }
-
-    /** Voice typing into the app on the car screen. The phone's own keyboard also works. */
-    private fun dictate() {
-        VoiceCommands.dictate(carContext, { words ->
-            surface.typeText(words)
-            say("Typed: $words")
-        }, { say(it) })
     }
 
     override fun playRadio(station: Station) {
@@ -196,7 +112,8 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
 
     override fun showVideo(on: Boolean) {
         if (on) {
-            Dock.load(carContext).firstOrNull()?.let { openDock(it) } ?: say("Pick shortcut apps in the Autodash phone app")
+            openBrowser()
+            if (!TripTracker.isParked()) say("The browser shows once you're parked. Sound keeps playing.")
         } else {
             surface.setMode(Mode.DASH)
             invalidate()

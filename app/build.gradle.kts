@@ -12,8 +12,8 @@ android {
         applicationId = (project.findProperty("appId") as String?) ?: "com.alzadash"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "4.12"
+        versionCode = 17
+        versionName = "4.13"
     }
 
     // Release signing comes from GitHub Actions secrets (see README). Without them the
@@ -39,10 +39,6 @@ android {
         }
     }
 
-    buildFeatures {
-        aidl = true
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -61,6 +57,4 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

@@ -26,12 +26,11 @@ import com.alzadash.core.Pkg
 import com.alzadash.core.Prefs
 import com.alzadash.core.Feature
 import com.alzadash.core.Features
-import com.alzadash.core.Shell
 
 /** The phone companion: quick launch buttons, tools and setup. */
 class MainActivity : AppCompatActivity() {
     private lateinit var prefs: Prefs
-    private lateinit var shizukuStatus: android.widget.TextView
+    private lateinit var setupStatus: android.widget.TextView
     private val handler = android.os.Handler(android.os.Looper.getMainLooper())
 
     private val askPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -60,15 +59,14 @@ class MainActivity : AppCompatActivity() {
             setPadding(dp(4), 0, dp(4), dp(4))
         })
         // What still needs doing, with the fix next to it. Hidden once everything is set up.
-        shizukuStatus = note("")
-        col.addView(shizukuStatus)
+        setupStatus = note("")
+        col.addView(setupStatus)
         fixRow = buttonRow()
         col.addView(fixRow)
 
         section(col, "DASHBOARD", true) {
             it.addView(buttonRow(
                 smallButton("Edit layout", accent) { startActivity(Intent(this, LayoutEditorActivity::class.java)) },
-                smallButton("Shortcuts") { startActivity(Intent(this, DockPickerActivity::class.java)) },
                 smallButton("Background") { chooseBackground() },
             ))
             // Car settings: welcome tone, size of the car screen's buttons, card beside the map.
@@ -94,24 +92,15 @@ class MainActivity : AppCompatActivity() {
             }
             it.addView(box)
             it.addView(buttonRow(
-                smallButton("Type", accent) {
+                smallButton("Open web", accent) {
+                    val text = box.text.toString()
+                    if (text.isBlank()) return@smallButton toast("Type a web address or search first")
+                    val url = Browser.toUrl(text)
+                    // Also kept as "From phone" on the car browser's Sites page.
+                    Browser.setPhoneUrl(this, url)
                     val surface = CarSurface.active?.get()
-                    when {
-                        surface == null || surface.displayId < 0 -> toast("Connect to the car first")
-                        !Shell.available() -> toast("Shizuku is needed for this")
-                        else -> {
-                            surface.typeText(box.text.toString())
-                            box.setText("")
-                        }
-                    }
-                },
-                smallButton("Enter") { CarSurface.active?.get()?.let { s -> Shell.key(s.displayId, 66) } },
-                smallButton("Open web") {
-                    val surface = CarSurface.active?.get()
-                    if (surface == null) toast("Connect to the car first") else {
-                        surface.openUrl(Browser.toUrl(box.text.toString()))
-                        box.setText("")
-                    }
+                    if (surface == null) toast("Saved as From phone on the car's Sites page") else surface.openUrl(url)
+                    box.setText("")
                 },
                 smallButton("Bookmark") {
                     val text = box.text.toString().trim()
@@ -127,7 +116,6 @@ class MainActivity : AppCompatActivity() {
         section(col, "QUICK LAUNCH", false) {
             it.addView(buttonRow(
                 smallButton("Play Store") { Launch.app(this, Pkg.PLAY_STORE) },
-                smallButton("YouTube") { Launch.app(this, Pkg.YOUTUBE) },
                 smallButton("Netflix") { Launch.app(this, Pkg.NETFLIX) },
             ))
             it.addView(buttonRow(
@@ -139,6 +127,48 @@ class MainActivity : AppCompatActivity() {
                 smallButton("Gemini", accent) { Launch.gemini(this) },
                 smallButton("All apps") { startActivity(Intent(this, AppsActivity::class.java)) },
                 smallButton("Install APK") { installApk() },
+            ))
+        }
+
+        // The car browser's settings, the same as Browser > ⋮ on the car screen.
+        section(col, "BROWSER", false) {
+            it.addView(buttonRow(
+                smallButton("Theme") { pick("Page theme", Browser.THEMES, Browser.theme(this)) { v -> Browser.setTheme(this, v); refreshBrowser() } },
+                smallButton("Zoom") {
+                    val z = listOf("75%", "90%", "100%", "110%", "125%", "150%", "175%", "200%")
+                    pick("Page zoom", z, "${Browser.zoom(this)}%") { v -> Browser.setZoom(this, v.removeSuffix("%").toInt()); refreshBrowser() }
+                },
+                smallButton("Desktop") {
+                    pick("Website version", listOf("Mobile", "Desktop"), if (Browser.desktop(this)) "Desktop" else "Mobile") { v ->
+                        Browser.setDesktop(this, v == "Desktop"); refreshBrowser() }
+                },
+            ))
+            it.addView(buttonRow(
+                smallButton("Bar colour") { pick("Bar colour", Browser.BAR_COLOURS.map { c -> c.first }, Browser.barColour(this)) { v ->
+                    Browser.setBarColour(this, v); refreshBrowser(false) } },
+                smallButton("Opacity") {
+                    val o = listOf("40%", "55%", "70%", "85%", "100%")
+                    pick("Bar opacity", o, "${Browser.barOpacity(this)}%") { v -> Browser.setBarOpacity(this, v.removeSuffix("%").toInt()); refreshBrowser(false) }
+                },
+                smallButton("Bar size") {
+                    val o = listOf("75%", "100%", "125%", "150%")
+                    pick("Bar size", o, "${Browser.barSize(this)}%") { v -> Browser.setBarSize(this, v.removeSuffix("%").toInt()); refreshBrowser(false) }
+                },
+            ))
+            it.addView(buttonRow(
+                smallButton("Bar buttons") { chooseBarButtons() },
+                smallButton("Bar position") {
+                    val spots = listOf("Bottom centre", "Bottom left", "Bottom right", "Top centre", "Top left", "Top right")
+                    pick("Bar position", spots, "") { v ->
+                        val x = when { v.endsWith("left") -> 0f; v.endsWith("right") -> 1f; else -> 0.5f }
+                        Browser.setBarPos(this, x, if (v.startsWith("Top")) 0f else 1f)
+                        refreshBrowser(false)
+                    }
+                },
+                smallButton("Ad block") {
+                    pick("Block ads", listOf("On", "Off"), if (Browser.adBlock(this)) "On" else "Off") { v ->
+                        Browser.setAdBlock(this, v == "On"); refreshBrowser() }
+                },
             ))
         }
 
@@ -163,11 +193,10 @@ class MainActivity : AppCompatActivity() {
 
         section(col, "SETUP", false) {
             it.addView(buttonRow(
-                smallButton("Allow Shizuku", accent) { allowShizuku() },
                 smallButton("Permissions") { requestPermissions() },
                 smallButton("Song access") { openNowPlayingAccess() },
             ))
-            // Phone mirroring works without Shizuku; these two switches let it rotate the phone and pass taps.
+            // These two switches let it rotate the phone and pass taps.
             it.addView(buttonRow(
                 smallButton("Mirror: taps") {
                     if (com.alzadash.mirror.MirrorTouch.enabled(this)) toast("Already on") else {
@@ -192,10 +221,9 @@ class MainActivity : AppCompatActivity() {
 
         section(col, "HELP", false) {
             it.addView(note(
-                "Install updates with KingInstaller (Shizuku Trick) so Android Auto lists Autodash.\n\n" +
+                "Install Autodash from Google Play so Android Auto lists it.\n\n" +
                     "Video and web pages on the car screen show only while the car is stopped; sound keeps playing.\n\n" +
-                    "Opening real apps (YouTube, Spotify, Waze) on the car screen and typing into them need Shizuku running and allowed.\n\n" +
-                    "Without Shizuku, use phone mirroring (the cast button above ⚙ on the car screen). Turn on Mirror: taps and Mirror: rotate in Setup once."
+                    "To see a phone app on the car screen, use phone mirroring (the cast button above ⚙ on the car screen). Turn on Mirror: taps and Mirror: rotate in Setup once."
             ))
         }
 
@@ -233,28 +261,19 @@ class MainActivity : AppCompatActivity() {
         parent.addView(body)
     }
 
-    private fun allowShizuku() {
-        if (!Shell.running()) toast("Open Shizuku and tap Start first") else Shell.requestPermission()
-        handler.postDelayed({ updateShizuku() }, 1500)
-    }
-
     private val settingsBoxes = HashMap<Feature, CheckBox>()
 
     override fun onResume() {
         super.onResume()
         settingsBoxes.forEach { (f, box) -> box.isChecked = Features.on(this, f) }
-        updateShizuku()
+        updateSetup()
     }
 
     /** Lists only what isn't set up yet, each with its fix button. */
-    private fun updateShizuku() {
+    private fun updateSetup() {
         val problems = mutableListOf<String>()
         fixRow.removeAllViews()
         val accent = getColor(com.alzadash.R.color.accent)
-        if (!Shell.available()) {
-            problems += if (Shell.running()) "Shizuku isn't allowed yet." else "Shizuku isn't running (needed for apps on the car screen)."
-            fixRow.addView(smallButton("Allow Shizuku", accent) { allowShizuku() }, weight())
-        }
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             problems += "Location isn't allowed, so the car screen can't tell when you're parked."
             fixRow.addView(smallButton("Location", accent) { requestPermissions() }, weight())
@@ -267,7 +286,7 @@ class MainActivity : AppCompatActivity() {
             problems += "Song names and lyrics need notification access."
             fixRow.addView(smallButton("Song access", accent) { openNowPlayingAccess() }, weight())
         }
-        shizukuStatus.text = if (problems.isEmpty()) "✓ All set up" else problems.joinToString("\n")
+        setupStatus.text = if (problems.isEmpty()) "✓ All set up" else problems.joinToString("\n")
         fixRow.visibility = if (problems.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE
     }
 
@@ -354,6 +373,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         pickApk.launch(arrayOf("application/vnd.android.package-archive"))
+    }
+
+    /** Shows changed browser settings on the car screen straight away. */
+    private fun refreshBrowser(reload: Boolean = true) {
+        val b = CarSurface.active?.get()?.browser ?: return
+        if (reload) b.applySettings() else b.applyBar()
+    }
+
+    private fun chooseBarButtons() {
+        val keys = Browser.BAR_BUTTONS
+        val shown = Browser.barButtons(this)
+        android.app.AlertDialog.Builder(this).setTitle("Buttons on the bar")
+            .setMultiChoiceItems(keys.map { it.second }.toTypedArray(), keys.map { it.first in shown }.toBooleanArray()) { _, i, on ->
+                Browser.setBarButton(this, keys[i].first, on)
+            }
+            .setPositiveButton("Done") { _, _ -> refreshBrowser(false) }
+            .show()
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()

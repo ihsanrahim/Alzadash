@@ -9,7 +9,6 @@ import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.model.Toggle
-import com.alzadash.core.Bookmark
 import com.alzadash.core.Browser
 import com.alzadash.core.VoiceCommands
 
@@ -24,6 +23,8 @@ class BrowserMenuScreen(
             screenManager.pop()
         }.build()
 
+    private fun next(list: List<String>, cur: String) = list[(list.indexOf(cur) + 1) % list.size]
+
     private fun say(s: String) = CarToast.makeText(carContext, s, CarToast.LENGTH_SHORT).show()
 
     override fun onGetTemplate(): Template {
@@ -33,15 +34,16 @@ class BrowserMenuScreen(
             VoiceCommands.dictate(carContext, { words -> surface.openUrl(Browser.toUrl(words)) }, { say(it) })
         })
         list.addItem(row("Forward") { b?.goForward() })
-        list.addItem(row("Reload") { b?.reload() })
-        list.addItem(row("Start page") { surface.openUrl(Browser.HOME) })
-        list.addItem(row("Bookmark this page") {
-            val page = b?.page
-            if (page == null) say("Open a website first") else {
-                Browser.addBookmark(carContext, Bookmark(page.first.take(40), page.second))
-                say("Bookmarked")
-            }
-        })
+        list.addItem(Row.Builder().setTitle("Page theme").addText(Browser.theme(carContext)).setOnClickListener {
+            Browser.setTheme(carContext, next(Browser.THEMES, Browser.theme(carContext)))
+            b?.applySettings()
+            invalidate()
+        }.build())
+        list.addItem(Row.Builder().setTitle("Page zoom").addText("${Browser.zoom(carContext)}% · tap to reset").setOnClickListener {
+            Browser.setZoom(carContext, 100)
+            b?.applySettings()
+            invalidate()
+        }.build())
         list.addItem(Row.Builder().setTitle("Desktop site").setToggle(Toggle.Builder { on ->
             Browser.setDesktop(carContext, on)
             b?.applySettings()
@@ -50,6 +52,9 @@ class BrowserMenuScreen(
             Browser.setAdBlock(carContext, on)
             b?.reload()
         }.setChecked(Browser.adBlock(carContext)).build()).build())
+        list.addItem(Row.Builder().setTitle("Navigation bar").addText("Colour, see-through, size, position, buttons")
+            .setBrowsable(true)
+            .setOnClickListener { screenManager.push(BrowserBarScreen(carContext, surface)) }.build())
         list.addItem(row("Clear history and cookies") {
             b?.clearData()
             say("Cleared")

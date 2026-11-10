@@ -8,7 +8,6 @@ import android.net.Uri
 object Pkg {
     const val PLAY_STORE = "com.android.vending"
     const val NETFLIX = "com.netflix.mediaclient"
-    const val YOUTUBE = "com.google.android.youtube"
     const val GEMINI = "com.google.android.apps.bard"
     const val MAPS = "com.google.android.apps.maps"
     const val WAZE = "com.waze"

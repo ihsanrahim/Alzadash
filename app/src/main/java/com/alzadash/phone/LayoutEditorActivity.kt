@@ -52,6 +52,14 @@ class LayoutEditorActivity : AppCompatActivity() {
         val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         top.addView(TextView(this).apply { text = "Edit widgets"; textSize = 20f; setTextColor(Color.WHITE) },
             LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        lateinit var gridButton: android.widget.Button
+        gridButton = smallButton(if (DashLayout.showGrid(this)) "Grid: on" else "Grid: off") {
+            val on = !DashLayout.showGrid(this)
+            DashLayout.setShowGrid(this, on)
+            gridButton.text = if (on) "Grid: on" else "Grid: off"
+            preview.reload(selected)
+        }
+        top.addView(gridButton)
         top.addView(smallButton("Layouts") { savedLayouts() })
         top.addView(smallButton("Reset") {
             AlertDialog.Builder(this).setMessage("Put every widget back where it started?")
@@ -62,7 +70,7 @@ class LayoutEditorActivity : AppCompatActivity() {
 
         preview = PreviewView(this) { w -> select(w) }
         root.addView(preview, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(230)))
-        root.addView(note("Drag a widget to move it · drag the dot to resize · tap to edit").apply { gravity = Gravity.CENTER })
+        root.addView(note("The car screen is ${DashLayout.COLS} square tiles wide · drag a widget to move it · drag the dot to resize").apply { gravity = Gravity.CENTER })
 
         chips = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         root.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(chips) })
@@ -147,9 +155,9 @@ class LayoutEditorActivity : AppCompatActivity() {
         panel.addView(heading("MOVE"))
         panel.addView(buttonRow(
             smallButton("←") { move(w, -1f / 24, 0f) },
-            smallButton("↑") { move(w, 0f, -1f / 12) },
-            smallButton("↓") { move(w, 0f, 1f / 12) },
-            smallButton("→") { move(w, 1f / 24, 0f) },
+            smallButton("↑") { move(w, 0f, -1f / DashLayout.rows(this)) },
+            smallButton("↓") { move(w, 0f, 1f / DashLayout.rows(this)) },
+            smallButton("→") { move(w, 1f / DashLayout.COLS, 0f) },
         ))
     }
 
@@ -247,7 +255,6 @@ class LayoutEditorActivity : AppCompatActivity() {
                     requestPermissions(arrayOf(android.Manifest.permission.READ_CALENDAR), 7)
                 }))
             }
-            Widget.YOUTUBE -> panel.addView(note("Search by voice, or open Home, Subscriptions or History. Opens in the YouTube app with Shizuku, otherwise in the car browser. Video shows only when parked."))
             Widget.RADAR -> panel.addView(note("Rain radar from RainViewer on an OpenStreetMap map, around where the car is. Updates every 10 minutes."))
             Widget.AIR -> panel.addView(note("US air-quality index and PM2.5 from Open-Meteo, plus UV, humidity and wind."))
             Widget.PLAYER -> panel.addView(note("Album art and controls for Spotify, YouTube Music or any music app. Needs Song access (phone app > Setup)."))
@@ -293,6 +300,7 @@ class LayoutEditorActivity : AppCompatActivity() {
         private val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#4FD1C5"); style = Paint.Style.STROKE; strokeWidth = 5f }
         private val faint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(70, 255, 255, 255); style = Paint.Style.STROKE; strokeWidth = 2f }
         private val handle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#4FD1C5") }
+        private val tile = Paint().apply { color = Color.argb(40, 255, 255, 255); style = Paint.Style.STROKE; strokeWidth = 1f }
         private var layout = mutableMapOf<Widget, RectF>()
         private var picked: Widget = Widget.CLOCK
         private var resizing = false
@@ -336,6 +344,8 @@ class LayoutEditorActivity : AppCompatActivity() {
             canvas.scale(area.width() / cw, area.height() / ch)
             dash.draw(canvas)
             canvas.restore()
+            // The square tiles every widget snaps to.
+            DashLayout.tiles(area).forEach { canvas.drawRect(it, tile) }
             for (wd in Widget.values()) {
                 if (!shown(wd)) continue
                 val r = DashLayout.place(layout.getValue(wd), area)
@@ -366,6 +376,8 @@ class LayoutEditorActivity : AppCompatActivity() {
                     parent?.requestDisallowInterceptTouchEvent(true)
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    val cols = DashLayout.COLS
+                    val rows = DashLayout.rows(context)
                     val dx = fx - startX
                     val dy = fy - startY
                     if (abs(dx) + abs(dy) < 0.01f && !moved) return true
@@ -373,11 +385,11 @@ class LayoutEditorActivity : AppCompatActivity() {
                     moved = true
                     val r = RectF(startRect)
                     if (resizing) {
-                        r.right = snap(startRect.right + dx, 48).coerceIn(r.left + 0.06f, 1f)
-                        r.bottom = snap(startRect.bottom + dy, 40).coerceIn(r.top + 0.05f, 1f)
+                        r.right = snap(startRect.right + dx, cols).coerceIn(r.left + 1f / cols, 1f)
+                        r.bottom = snap(startRect.bottom + dy, rows).coerceIn(r.top + 1f / rows, 1f)
                     } else {
-                        r.offsetTo(snap(startRect.left + dx, 48).coerceIn(0f, 1f - r.width()),
-                            snap(startRect.top + dy, 40).coerceIn(0f, 1f - r.height()))
+                        r.offsetTo(snap(startRect.left + dx, cols).coerceIn(0f, 1f - r.width()),
+                            snap(startRect.top + dy, rows).coerceIn(0f, 1f - r.height()))
                     }
                     layout[picked] = r
                     DashLayout.save(context, layout)

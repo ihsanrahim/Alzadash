@@ -31,13 +31,12 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     private var mode = Mode.DASH
     private var visible = Rect()
     private var lastUrl = Browser.HOME
-    private var forcedBlock = false
-    var onDock: (DockApp) -> Unit = {}
     var onRadioStep: (Int) -> Unit = {}
     var onStation: (com.alzadash.core.Station) -> Unit = {}
     var onSettings: () -> Unit = {}
     var onQuick: (String) -> Unit = {}
-    var onYouTube: (String) -> Unit = {}
+    var onCloseBrowser: () -> Unit = {}
+    var onMessage: (String) -> Unit = {}
     var onOpenApp: (String) -> Unit = {}
     var onOpenLink: (String) -> Unit = {}
     private val handler = Handler(Looper.getMainLooper())
@@ -55,12 +54,10 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
         val ctx = getContext()
         root = FrameLayout(ctx).apply { setBackgroundColor(DashboardView.BG) }
         dash = DashboardView(ctx).apply {
-            onDockTap = { app -> onDock(app) }
             onRadioStep = { d -> this@DashPresentation.onRadioStep(d) }
             onStationTap = { st -> onStation(st) }
             onSettingsTap = { onSettings() }
             onQuick = { k -> onQuick(k) }
-            onYouTube = { k -> this@DashPresentation.onYouTube(k) }
             onOpenApp = { pkg -> this@DashPresentation.onOpenApp(pkg) }
             onOpenLink = { url -> this@DashPresentation.onOpenLink(url) }
         }
@@ -123,7 +120,10 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
             videoLayer.visibility = View.VISIBLE
             dash.visibility = View.GONE
         } else if (m == Mode.WEB) {
-            if (browser == null) browser = CarBrowser(getContext(), videoLayer, lastUrl)
+            if (browser == null) browser = CarBrowser(getContext(), videoLayer, lastUrl).also {
+                it.onClose = { onCloseBrowser() }
+                it.onMessage = { m -> onMessage(m) }
+            }
             videoLayer.visibility = View.VISIBLE
             dash.visibility = View.GONE
         } else {
@@ -147,23 +147,17 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
 
     fun goBack() = browser?.goBack()
 
-    /** Covers everything, used while a real app is open on the car screen and the car is moving. */
-    fun setBlocked(on: Boolean) {
-        forcedBlock = on
-        if (::root.isInitialized) updateVideoGate()
-    }
-
     /** The safety gate: video shows only when the car is confirmed stopped. */
     private fun updateVideoGate() {
         // Mirroring has its own driving cover inside MirrorView.
-        if ((mode != Mode.WEB && !forcedBlock) || (mode == Mode.MIRROR && !forcedBlock)) {
+        if (mode != Mode.WEB) {
             block.visibility = View.GONE
             return
         }
-        if (TripTracker.isParked() && !forcedBlock) {
+        if (TripTracker.isParked()) {
             block.visibility = View.GONE
         } else {
-            block.text = if (TripTracker.speedKmh() == null && !forcedBlock) {
+            block.text = if (TripTracker.speedKmh() == null) {
                 TripTracker.problem(context) + "\n\nThe page appears once the car is confirmed stopped."
             } else {
                 "The browser is hidden while driving.\n\nSound keeps playing. The page comes back when you stop."
@@ -173,6 +167,9 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     }
 
     fun tap(x: Float, y: Float) {
+        browser?.let {
+            if (mode == Mode.WEB && it.moving) return it.endMove()
+        }
         val target = window?.decorView ?: return
         val t = SystemClock.uptimeMillis()
         send(target, MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0))
@@ -182,6 +179,9 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     /** Turns a scroll on the car screen into a finger drag, so web pages scroll naturally. */
     fun drag(dx: Float, dy: Float) {
         if (mode != Mode.WEB) return
+        browser?.let {
+            if (it.moving) return it.moveBar(dx, dy)
+        }
         val target = window?.decorView ?: return
         val cx = target.width / 2f
         val cy = target.height / 2f
@@ -198,9 +198,4 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
         e.recycle()
     }
 
-    companion object {
-        const val YOUTUBE = "https://m.youtube.com"
-        const val NETFLIX = "https://www.netflix.com"
-
-    }
 }

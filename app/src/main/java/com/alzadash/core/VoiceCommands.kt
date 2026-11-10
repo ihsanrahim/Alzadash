@@ -136,7 +136,7 @@ object VoiceCommands {
                     target.stopRadio(); return
                 }
                 s.contains("reset trip") -> { target.resetTrip(); return }
-                s.contains("video") || s.contains("youtube") || s.contains("netflix") -> { target.showVideo(true); return }
+                s.contains("video") || s.contains("netflix") -> { target.showVideo(true); return }
                 s.contains("dashboard") -> { target.showVideo(false); return }
                 s.startsWith("play") || s.contains("radio") -> {
                     val name = s.removePrefix("play").replace("radio", "").trim()

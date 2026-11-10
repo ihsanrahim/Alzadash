@@ -48,9 +48,6 @@ class DashboardView(context: Context) : View(context) {
             invalidate()
         }
 
-    /** Called when a shortcut in the right-hand bar is tapped. */
-    var onDockTap: (DockApp) -> Unit = {}
-
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val dim = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = DIM }
     private val accent = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ACCENT }
@@ -60,10 +57,6 @@ class DashboardView(context: Context) : View(context) {
     private val bold = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     private val light = Typeface.create("sans-serif-light", Typeface.NORMAL)
 
-    private val dockRects = mutableListOf<Pair<RectF, DockApp>>()
-    private val icons = HashMap<String, Drawable?>()
-    private var dockApps: List<DockApp> = emptyList()
-    private var dockLoadedAt = 0L
     private val prevRect = RectF()
     private val nextRect = RectF()
     private val shade = Paint().apply { color = Color.argb(150, 0, 0, 0) }
@@ -80,13 +73,9 @@ class DashboardView(context: Context) : View(context) {
     /** Called when one of the small buttons above ⚙ is tapped: "mic", "radio", "nav" or "web". */
     var onQuick: (String) -> Unit = {}
 
-    /** The YouTube card: "search", "home", "subs" or "history". */
-    var onYouTube: (String) -> Unit = {}
-
     /** Drawn as a preview in the phone's editor: no taps, nothing that changes car state. */
     var preview = false
 
-    private val ytRects = mutableListOf<Pair<RectF, String>>()
     private val playerRects = mutableListOf<Pair<RectF, Int>>()
 
     /**
@@ -95,7 +84,7 @@ class DashboardView(context: Context) : View(context) {
      */
     private val reserved = RectF()
 
-    /** Called from the lyrics page to open the music app itself on the car screen. */
+    /** Kept for callers; phone apps are shown on the car screen by mirroring. */
     var onOpenApp: (String) -> Unit = {}
 
     /** Called when a news story is tapped, to open it in the car browser. */
@@ -113,11 +102,7 @@ class DashboardView(context: Context) : View(context) {
     private val settingsRect = RectF()
     private val quickRects = mutableListOf<Pair<RectF, String>>()
     private val mirrorRect = RectF()
-    private val appsRect = RectF()
-    private val panelRect = RectF()
-    /** Whether the apps row is folded out. */
-    private var dockOpen = false
-    private val solidCard = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F0202A3A") }
+    private val tilePaint = Paint().apply { color = Color.argb(22, 255, 255, 255) }
     private val quickIcons = mutableMapOf<String, android.graphics.drawable.Drawable?>()
     private val musicRect = RectF()
     private val closeRect = RectF()
@@ -185,7 +170,6 @@ class DashboardView(context: Context) : View(context) {
         if (lyricsOpen) {
             when {
                 closeRect.contains(x, y) -> showLyrics(false)
-                openAppRect.contains(x, y) -> track?.pkg?.takeIf { it.isNotEmpty() }?.let { onOpenApp(it) }
                 else -> lyricCtlRects.firstOrNull { it.first.contains(x, y) }?.let {
                     NowPlaying.control(context, it.second)
                     postInvalidateDelayed(300)
@@ -193,18 +177,8 @@ class DashboardView(context: Context) : View(context) {
             }
             return
         }
-        // The folded-out apps row takes taps first; a tap anywhere else folds it away.
-        if (dockOpen) {
-            val hit = dockRects.firstOrNull { it.first.contains(x, y) }
-            dockOpen = false
-            invalidate()
-            if (hit != null) { onDockTap(hit.second); return }
-            if (appsRect.contains(x, y) || panelRect.contains(x, y)) return
-        }
-        ytRects.firstOrNull { it.first.contains(x, y) }?.let { onYouTube(it.second); return }
         playerRects.firstOrNull { it.first.contains(x, y) }?.let { NowPlaying.control(context, it.second); postInvalidateDelayed(300); return }
         when {
-            appsRect.contains(x, y) -> { dockOpen = true; invalidate() }
             mirrorRect.contains(x, y) -> onQuick("mirror")
             settingsRect.contains(x, y) -> onSettingsTap()
             quickRects.any { it.first.contains(x, y) } -> onQuick(quickRects.first { it.first.contains(x, y) }.second)
@@ -234,16 +208,12 @@ class DashboardView(context: Context) : View(context) {
         chipRects.clear()
         settingsRect.setEmpty()
         quickRects.clear()
-        ytRects.clear()
         playerRects.clear()
         mirrorRect.setEmpty()
-        appsRect.setEmpty()
-        panelRect.setEmpty()
         prevRect.setEmpty()
         nextRect.setEmpty()
         musicRect.setEmpty()
         newsRect.setEmpty()
-        dockRects.clear()
         if (newsOpen && !preview) {
             newsPage.draw(canvas, panel ?: RectF(if (visibleArea.isEmpty) Rect(0, 0, width, height) else visibleArea))
             postInvalidateDelayed(50) // keeps the LATEST strip moving
@@ -263,7 +233,6 @@ class DashboardView(context: Context) : View(context) {
         val (lat, lng) = TripTracker.position(context)
         Weather.refreshIfStale(lat, lng)
         panel?.let {
-            dockRects.clear()
             drawColumn(canvas, it, lat, lng)
             return
         }
@@ -275,6 +244,8 @@ class DashboardView(context: Context) : View(context) {
         if (!v.isEmpty && v.top > 0) reserved.set(width - v.top * 1.7f, 0f, width.toFloat(), v.top.toFloat())
         else if (!v.isEmpty && v.right < width) reserved.set(v.right.toFloat(), 0f, width.toFloat(), (width - v.right) * 1.2f)
         val layout = DashLayout.get(context)
+        // The square tiles the widgets snap to, drawn faintly behind them.
+        if (DashLayout.showGrid(context)) DashLayout.tiles(a).forEach { canvas.drawRect(it, tilePaint) }
         var dockShown = false
         // Each widget sits where the phone's layout editor put it, its text sized to its box.
         for (w in Widget.values()) {
@@ -321,7 +292,6 @@ class DashboardView(context: Context) : View(context) {
                 Widget.AIR -> drawAir(canvas, r, min(r.height() / 5.2f, r.width() / 4.2f) * k)
                 Widget.RADAR -> drawRadar(canvas, r, min(r.height(), r.width()) / 4.5f * k, lat, lng)
                 Widget.PLAYER -> drawPlayer(canvas, r, min(r.height() / 3.2f, r.width() / 9f) * k)
-                Widget.YOUTUBE -> drawYouTube(canvas, r, min(r.height() / 2.4f, r.width() / 7.5f) * k)
                 Widget.WEATHER2 -> drawWeather2(canvas, r, min(r.height() / 2.6f, r.width() / 4.6f) * k)
             }
         }
@@ -655,13 +625,7 @@ class DashboardView(context: Context) : View(context) {
         text.typeface = bold
         text.textSize = u * 0.55f
         canvas.drawText("✕", closeRect.centerX() - text.measureText("✕") / 2, closeRect.centerY() + u * 0.2f, text)
-        val appLabel = "Open ${appName(t.pkg)}"
-        accent.textSize = u * 0.42f
-        val ow = accent.measureText(appLabel) + u * 0.8f
-        openAppRect.set(closeRect.left - u * 0.3f - ow, closeRect.top, closeRect.left - u * 0.3f, closeRect.bottom)
-        canvas.drawRoundRect(openAppRect, bh / 2, bh / 2, card)
-        canvas.drawText(appLabel, openAppRect.left + u * 0.4f, openAppRect.centerY() + u * 0.15f, accent)
-        val headW = openAppRect.left - left - u * 0.3f
+        val headW = closeRect.left - left - u * 0.3f
         canvas.drawText(ellipsize(t.title, text, headW), left, r.top + pad + u * 0.6f, text)
         dim.textSize = u * 0.42f
         canvas.drawText(ellipsize(t.artist, dim, headW), left, r.top + pad + u * 1.15f, dim)
@@ -869,8 +833,7 @@ class DashboardView(context: Context) : View(context) {
     }
 
     /**
-     * The shortcut bar. From the top: the apps button (its apps fold out sideways when tapped),
-     * then at the foot the four quick buttons, phone mirroring and ⚙ settings.
+     * The shortcut bar: the four quick buttons (mic, radio, maps, web), phone mirroring and ⚙ settings at its foot.
      */
     private fun drawDock(canvas: Canvas, l: Float, t: Float, r: Float, b: Float, u: Float) {
         // Laid out down the bar, or across it when the bar was made wide in the layout editor.
@@ -886,50 +849,6 @@ class DashboardView(context: Context) : View(context) {
         drawIcon(canvas, com.alzadash.R.drawable.ic_mirror, mirrorRect, 0.5f)
         val quick = slotFromEnd(thick * 1.85f, thick)
         drawQuick(canvas, quick)
-
-        // Apps that open on the car screen (they need Shizuku) sit behind one button.
-        val apps = if (across) RectF(l, t, l + thick, b) else RectF(l, t, r, t + thick)
-        appsRect.set(apps)
-        if (dockOpen) canvas.drawRoundRect(apps, thick * 0.25f, thick * 0.25f, bar)
-        drawIcon(canvas, com.alzadash.R.drawable.ic_apps, apps, 0.45f)
-        if (!dockOpen) return
-        if (System.currentTimeMillis() - dockLoadedAt > 15_000) {
-            dockApps = Dock.load(context)
-            dockLoadedAt = System.currentTimeMillis()
-        }
-        val list = dockApps
-        val gap = thick * 0.15f
-        val n = maxOf(list.size, 1)
-        // Folds out to the left of the bar (or upward from a bar laid across the bottom), in one row.
-        val panel = if (across) RectF(apps.left, apps.top - gap - thick, apps.left + n * thick, apps.top - gap)
-        else RectF(apps.left - gap - n * thick, apps.top, apps.left - gap, apps.bottom)
-        if (panel.left < 0) panel.offset(-panel.left, 0f)
-        panelRect.set(panel)
-        canvas.drawRoundRect(panel, thick * 0.25f, thick * 0.25f, solidCard)
-        if (list.isEmpty()) {
-            dim.textSize = thick * 0.2f
-            val msg = "Pick apps in the phone app"
-            canvas.drawText(ellipsize(msg, dim, panel.width() - thick * 0.2f), panel.left + thick * 0.1f, panel.centerY() + thick * 0.07f, dim)
-            return
-        }
-        val size = thick * 0.62f
-        list.forEachIndexed { i, app ->
-            val cx = panel.left + thick * i + thick / 2
-            val cy = panel.centerY()
-            val rect = RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
-            dockRects += RectF(cx - thick / 2, panel.top, cx + thick / 2, panel.bottom) to app
-            val icon = icons.getOrPut(app.pkg) { Dock.icon(context, app) }
-            if (icon != null) {
-                icon.setBounds(rect.left.toInt(), rect.top.toInt(), rect.right.toInt(), rect.bottom.toInt())
-                icon.draw(canvas)
-            } else {
-                canvas.drawOval(rect, bar)
-                text.typeface = bold
-                text.textSize = size * 0.45f
-                val letter = app.label.take(1)
-                canvas.drawText(letter, cx - text.measureText(letter) / 2, cy + size * 0.16f, text)
-            }
-        }
     }
 
     private fun drawIcon(canvas: Canvas, res: Int, r: RectF, frac: Float) {
@@ -1124,40 +1043,6 @@ class DashboardView(context: Context) : View(context) {
         playerRects += next to 1
     }
 
-    /** "Search YouTube" by voice, plus Home, Subscriptions and History. */
-    private fun drawYouTube(c: Canvas, r: RectF, u: Float) {
-        c.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
-        val pad = u * 0.25f
-        val half = (r.height() - pad * 3) / 2
-        val search = RectF(r.left + pad, r.top + pad, r.right - pad, r.top + pad + half)
-        c.drawRoundRect(search, search.height() / 2, search.height() / 2, shade)
-        val red = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#FF0033") }
-        val logo = RectF(search.left + u * 0.3f, search.centerY() - u * 0.22f, search.left + u * 0.9f, search.centerY() + u * 0.22f)
-        c.drawRoundRect(logo, u * 0.1f, u * 0.1f, red)
-        val tri = android.graphics.Path().apply {
-            moveTo(logo.centerX() - u * 0.08f, logo.centerY() - u * 0.12f)
-            lineTo(logo.centerX() + u * 0.12f, logo.centerY())
-            lineTo(logo.centerX() - u * 0.08f, logo.centerY() + u * 0.12f)
-            close()
-        }
-        c.drawPath(tri, text)
-        text.typeface = Typeface.DEFAULT
-        text.textSize = u * 0.36f
-        c.drawText(ellipsize("Search YouTube", text, search.right - logo.right - u * 0.4f), logo.right + u * 0.25f, search.centerY() + u * 0.13f, text)
-        ytRects += search to "search"
-        val labels = listOf("Home" to "home", "Subscriptions" to "subs", "History" to "history")
-        val bw = (r.width() - pad * 4) / 3
-        labels.forEachIndexed { i, (label, kind) ->
-            val b = RectF(r.left + pad + i * (bw + pad), search.bottom + pad, r.left + pad + i * (bw + pad) + bw, r.bottom - pad)
-            c.drawRoundRect(b, b.height() / 2, b.height() / 2, shade)
-            text.textSize = u * 0.3f
-            val l = ellipsize(label, text, b.width() - u * 0.2f)
-            center(c, l, b.centerX(), b.centerY() + u * 0.1f, text)
-            ytRects += b to kind
-        }
-    }
-
-    /** Weather with "feels like" and UV. */
     private fun drawWeather2(c: Canvas, r: RectF, u: Float) {
         c.drawRoundRect(r, u * 0.4f, u * 0.4f, card)
         val w = Weather.now

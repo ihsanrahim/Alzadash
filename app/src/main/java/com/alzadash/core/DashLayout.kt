@@ -18,7 +18,6 @@ enum class Widget(val label: String, val feature: Feature?) {
     AIR("Air quality", null),
     RADAR("Rain radar", null),
     PLAYER("Music player", null),
-    YOUTUBE("YouTube", null),
     WEATHER2("Weather (detail)", null),
 }
 
@@ -47,12 +46,11 @@ object DashLayout {
         Widget.AIR to g(11.4f, 0.5f, 14.1f, 4.55f),
         Widget.RADAR to g(11.4f, 0.5f, 14.1f, 2.5f),
         Widget.PLAYER to g(0.5f, 6.45f, 9.0f, 9.5f),
-        Widget.YOUTUBE to g(9.2f, 6.45f, 14.1f, 7.9f),
         Widget.WEATHER2 to g(11.4f, 2.8f, 14.1f, 4.55f),
     )
 
     /** Hidden until added in the editor. */
-    private val NEW_WIDGETS = setOf(Widget.CALENDAR, Widget.AIR, Widget.RADAR, Widget.PLAYER, Widget.YOUTUBE, Widget.WEATHER2)
+    private val NEW_WIDGETS = setOf(Widget.CALENDAR, Widget.AIR, Widget.RADAR, Widget.PLAYER, Widget.WEATHER2)
 
     private var lastRaw: String? = "unset"
     private var cached: Map<Widget, RectF> = DEFAULTS
@@ -171,9 +169,48 @@ object DashLayout {
         }
     }
 
-    /** [frac] placed inside [area]. */
-    fun place(frac: RectF, area: RectF) = RectF(
-        area.left + frac.left * area.width(), area.top + frac.top * area.height(),
-        area.left + frac.right * area.width(), area.top + frac.bottom * area.height(),
-    )
+    // ---- Square grid tiles ----
+
+    /** The screen's width is split into this many square tiles; every widget covers whole tiles. */
+    const val COLS = 20
+
+    /** How many whole square tiles fit down [area] when its width holds [COLS]. */
+    fun rows(area: RectF): Int = maxOf(1, (area.height() / (area.width() / COLS)).toInt())
+
+    /** Rows of tiles on a car screen of the remembered shape, for the phone editor. */
+    fun rows(context: Context): Int = maxOf(1, (COLS / carAspect(context)).toInt())
+
+    /** Whether the square tiles are drawn faintly behind the widgets on the car screen. */
+    fun showGrid(context: Context) = sp(context).getBoolean("show_grid", true)
+    fun setShowGrid(context: Context, on: Boolean) = sp(context).edit().putBoolean("show_grid", on).apply()
+
+    /** The whole grid of square tiles in [area] (the spare strip left under the last row is shared top and bottom). */
+    fun tiles(area: RectF): List<RectF> {
+        val cell = area.width() / COLS
+        val rows = rows(area)
+        val top = area.top + (area.height() - rows * cell) / 2
+        val gap = cell * 0.06f
+        val out = ArrayList<RectF>(COLS * rows)
+        for (r in 0 until rows) for (c in 0 until COLS) {
+            out += RectF(area.left + c * cell + gap, top + r * cell + gap, area.left + (c + 1) * cell - gap, top + (r + 1) * cell - gap)
+        }
+        return out
+    }
+
+    /**
+     * [frac] placed inside [area], snapped to whole square tiles: the width holds [COLS] tiles
+     * and as many rows as fit down it. A small gap is left at every edge so neighbours don't touch.
+     */
+    fun place(frac: RectF, area: RectF): RectF {
+        val cell = area.width() / COLS
+        if (cell <= 0f) return RectF(area)
+        val rows = rows(area)
+        val top = area.top + (area.height() - rows * cell) / 2
+        val l = Math.round(frac.left * COLS).coerceIn(0, COLS - 1)
+        val r = Math.round(frac.right * COLS).coerceIn(l + 1, COLS)
+        val t = Math.round(frac.top * rows).coerceIn(0, rows - 1)
+        val b = Math.round(frac.bottom * rows).coerceIn(t + 1, rows)
+        val gap = cell * 0.06f
+        return RectF(area.left + l * cell + gap, top + t * cell + gap, area.left + r * cell - gap, top + b * cell - gap)
+    }
 }
