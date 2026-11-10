@@ -71,6 +71,9 @@ object Lyrics {
         return null
     }
 
+    /** Shown for songs LRCLIB marks as having no words; timed at 0 so it also shows while driving. */
+    private val INSTRUMENTAL = listOf(LyricLine(0, "♪ Instrumental ♪"))
+
     /** Index of the line being sung at [positionMs], or -1 before the first line or for unsynced lyrics. */
     fun currentIndex(lines: List<LyricLine>, positionMs: Long): Int {
         if (lines.isEmpty() || lines[0].atMs < 0) return -1
@@ -80,6 +83,7 @@ object Lyrics {
     private fun find(t: Track): List<LyricLine> {
         // Fastest: an exact match on title, artist and length (Spotify and YouTube Music give clean names).
         exact(t)?.let { hit ->
+            if (hit.optBoolean("instrumental")) return INSTRUMENTAL
             hit.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { return parseLrc(it) }
             hit.optString("plainLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { plain ->
                 return plain.lines().map { LyricLine(-1, it.trim()) }
@@ -87,6 +91,7 @@ object Lyrics {
         }
         for ((title, artist) in guesses(t)) {
             val hit = search(title, artist) ?: continue
+            if (hit.optBoolean("instrumental")) return INSTRUMENTAL
             hit.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { return parseLrc(it) }
             hit.optString("plainLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { plain ->
                 return plain.lines().map { LyricLine(-1, it.trim()) }
@@ -136,7 +141,7 @@ object Lyrics {
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
             if (o.optString("syncedLyrics").let { it.isNotBlank() && it != "null" }) return o
-            if (plain == null && o.optString("plainLyrics").let { it.isNotBlank() && it != "null" }) plain = o
+            if (plain == null && (o.optBoolean("instrumental") || o.optString("plainLyrics").let { it.isNotBlank() && it != "null" })) plain = o
         }
         return plain
     }
