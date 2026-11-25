@@ -28,7 +28,8 @@ class BrowserGoScreen(carContext: CarContext, private val surface: CarSurface) :
             val title = if (url.contains("google.com/search")) "Search Google for \"$typed\"" else "Go to $url"
             list.addItem(Row.Builder().setTitle(title).setOnClickListener { go(typed) }.build())
         }
-        list.addItem(Row.Builder().setTitle("Start page").setOnClickListener { go("") }.build())
+        list.addItem(Row.Builder().setTitle("Home page").addText(Browser.homePage(carContext)).setOnClickListener { go(Browser.homePage(carContext)) }.build())
+        list.addItem(Row.Builder().setTitle("Sites page").setOnClickListener { go("") }.build())
         Browser.bookmarks(carContext)
             .filter { typed.isBlank() || it.title.contains(typed, true) || it.url.contains(typed, true) }
             .forEach { b ->

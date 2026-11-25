@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -13,10 +14,11 @@ import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
-import android.webkit.WebSettings
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -25,6 +27,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.alzadash.R
+import com.alzadash.car.aab.AABrowserWeb
 import com.alzadash.core.Bookmark
 import com.alzadash.core.Browser
 import java.io.ByteArrayInputStream
@@ -34,6 +37,8 @@ import org.json.JSONObject
  * The built-in browser on the car screen: tabs of web pages under a floating bar that can be
  * moved, recoloured, resized and given only the buttons you want, a Sites page of shortcuts,
  * an on-screen keyboard that appears when a text box is tapped, page zoom and a dark theme.
+ * Pages open on the home page (YouTube unless changed). The web engine itself, how each page
+ * view is set up, comes from AA Browser by kododake (GPL-3.0); see [AABrowserWeb].
  */
 @SuppressLint("SetJavaScriptEnabled")
 class CarBrowser(private val context: Context, private val container: FrameLayout, startUrl: String) {
@@ -89,19 +94,11 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
 
     // ---- Tabs ----
 
+    /** A new page view, set up the way AA Browser sets up its WebView (see [AABrowserWeb]). */
     private fun makeWeb(): WebView {
         val w = WebView(context)
-        w.setBackgroundColor(Color.parseColor("#0E1116"))
-        w.settings.javaScriptEnabled = true
-        w.settings.domStorageEnabled = true
-        w.settings.mediaPlaybackRequiresUserGesture = false
-        w.settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-        w.settings.builtInZoomControls = true
-        w.settings.displayZoomControls = false
-        w.settings.useWideViewPort = true
-        w.settings.setSupportMultipleWindows(false)
+        AABrowserWeb.configure(w, Browser.desktop(context))
         w.addJavascriptInterface(Bridge(), "AutodashKb")
-        applyDesktop(w)
         w.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 if (Browser.adBlock(context) && Browser.isAd(request.url.host)) {
@@ -112,17 +109,32 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (request.url.toString() == Browser.HOME) {
-                    load(Browser.HOME)
+                    loadInto(view, Browser.HOME)
                     return true
                 }
                 // Links to apps (intent:, market:, tel: ...) can't open on the car screen.
-                val scheme = request.url.scheme ?: return false
-                return scheme != "http" && scheme != "https"
+                return !AABrowserWeb.isWebScheme(request.url.scheme)
             }
 
             override fun onPageFinished(view: WebView, url: String?) {
                 pageSetup(view)
                 if (view == web) applyBar()
+            }
+
+            // As in AA Browser: if the page's renderer dies, replace the tab instead of crashing the app.
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                val i = tabs.indexOf(view)
+                pages.removeView(view)
+                view.destroy()
+                if (i >= 0) {
+                    val fresh = makeWeb()
+                    tabs[i] = fresh
+                    pages.addView(fresh, i, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                    showTab(current)
+                    loadInto(fresh, Browser.homePage(context))
+                }
+                onMessage("The page stopped working and was reloaded")
+                return true
             }
         }
         w.webChromeClient = object : WebChromeClient() {
@@ -136,11 +148,34 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
                 fullscreenView?.let { container.removeView(it) }
                 fullscreenView = null
             }
+
+            override fun onPermissionRequest(request: PermissionRequest) = AABrowserWeb.onPermissionRequest(w, request)
+
+            // Pop-ups and "open in new window" links open in a new tab, as in AA Browser.
+            override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
+                if (tabs.size >= MAX_TABS) {
+                    val link = view.hitTestResult.extra
+                    if (!link.isNullOrBlank()) view.loadUrl(link)
+                    return !link.isNullOrBlank()
+                }
+                val fresh = makeWeb()
+                tabs += fresh
+                pages.addView(fresh, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+                showTab(tabs.size - 1)
+                (resultMsg.obj as WebView.WebViewTransport).webView = fresh
+                resultMsg.sendToTarget()
+                return true
+            }
+
+            override fun onCloseWindow(window: WebView) {
+                val i = tabs.indexOf(window)
+                if (i >= 0) closeTab(i)
+            }
         }
         return w
     }
 
-    fun newTab(url: String = Browser.HOME) {
+    fun newTab(url: String = Browser.homePage(context)) {
         if (tabs.size >= MAX_TABS) {
             onMessage("Up to $MAX_TABS tabs; close one first")
             return
@@ -160,7 +195,7 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
 
     private fun closeTab(i: Int) {
         if (tabs.size <= 1) {
-            load(Browser.HOME)
+            load(Browser.homePage(context))
             return
         }
         val w = tabs.removeAt(i)
@@ -294,11 +329,7 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
         onMessage("Zoom ${Browser.zoom(context)}%")
     }
 
-    private fun applyDesktop(w: WebView) {
-        val desktop = Browser.desktop(context)
-        w.settings.userAgentString = if (desktop) DESKTOP_UA else null
-        w.settings.loadWithOverviewMode = desktop
-    }
+    private fun applyDesktop(w: WebView) = AABrowserWeb.applyIdentity(w, Browser.desktop(context))
 
     /** Applies changed settings (desktop site, theme, zoom, bar) and reloads. */
     fun applySettings() {
@@ -381,6 +412,7 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
                 "back" -> R.drawable.ic_back
                 "forward" -> R.drawable.ic_forward
                 "home" -> R.drawable.ic_home
+                "sites" -> R.drawable.ic_apps
                 "reload" -> R.drawable.ic_reload
                 "star" -> if (starred) R.drawable.ic_star_filled else R.drawable.ic_star
                 "tabs" -> R.drawable.ic_tabs
@@ -416,7 +448,8 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
         when (key) {
             "back" -> goBack()
             "forward" -> goForward()
-            "home" -> load(Browser.HOME)
+            "home" -> load(Browser.homePage(context))
+            "sites" -> load(Browser.HOME)
             "reload" -> reload()
             "star" -> toggleBookmark()
             "tabs" -> toggleTabs()
@@ -515,6 +548,5 @@ class CarBrowser(private val context: Context, private val container: FrameLayou
 
     companion object {
         const val MAX_TABS = 6
-        private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0"
     }
 }

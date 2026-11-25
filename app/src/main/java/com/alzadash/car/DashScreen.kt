@@ -78,9 +78,9 @@ class DashScreen(carContext: CarContext, private val surface: CarSurface) : Scre
     /** Drive home, Google Maps, Waze, Gemini and trip reset. */
     private fun openMap() = screenManager.push(GoScreen(carContext, this))
 
-    /** The built-in browser, opening on its start page of shortcuts. */
+    /** The built-in browser, opening on its home page (YouTube unless changed). */
     fun openBrowser() {
-        surface.openUrl(com.alzadash.core.Browser.HOME)
+        surface.openUrl(com.alzadash.core.Browser.homePage(carContext))
         invalidate()
     }
 

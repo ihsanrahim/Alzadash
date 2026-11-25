@@ -42,3 +42,15 @@ Without them the build uses a throwaway debug key: the APK still installs, but y
 ## Build yourself
 
 `./gradlew assembleRelease` with JDK 17 and the Android SDK. Output: `app/build/outputs/apk/release/app-release.apk`.
+
+## Credits and license
+
+- The car-screen browser's web engine (how each page is set up: Chrome identity, DRM video,
+  pop-ups as tabs, crash recovery) is ported from **[AA Browser](https://github.com/kododake/AABrowser)**
+  by kododake, licensed GPL-3.0. See `app/src/main/java/com/alzadash/car/aab/AABrowserWeb.kt`.
+- Song-name cleaning, the length check and the SyncLRC second lyrics source come from
+  **[Auto Lyrics](https://github.com/GitUpGitUp/auto-lyrics)** (from efrayim-dev/auto-lyrics), MIT License.
+  See `app/src/main/java/com/alzadash/core/AutoLyrics.kt`.
+
+Because it includes GPL-3.0 code, Autodash as a whole is released under the
+**GNU General Public License v3.0 or later** (see `LICENSE`).
