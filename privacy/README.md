@@ -33,7 +33,7 @@ The app connects directly from your phone to these public services. Each one get
 
 - **Open-Meteo** (weather and air quality): your approximate location.
 - **RainViewer** and **OpenStreetMap** (rain radar map): the map area around you.
-- **LRCLIB** (lyrics): the song title, artist and length.
+- **LRCLIB** and **SyncLRC** (synclrc.tharuk.pro, used only when LRCLIB has no lyrics): the song title, artist and length.
 - **Radio Browser** (radio station lookup) and the radio stations you play.
 - **News websites and Google News** (news headlines), and **ESPN, Jolpica and MotoGP** (sports standings).
 - **Websites you open** in the built-in browser, including YouTube and others. They may use cookies, which are kept on your phone and can be cleared in the app's browser settings.

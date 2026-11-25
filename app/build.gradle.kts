@@ -12,8 +12,8 @@ android {
         applicationId = (project.findProperty("appId") as String?) ?: "com.alzadash"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "4.13"
+        versionCode = 18
+        versionName = "4.14"
     }
 
     // Release signing comes from GitHub Actions secrets (see README). Without them the
@@ -52,6 +52,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.car.app:app:1.4.0")
     implementation("androidx.car.app:app-projected:1.4.0")
     implementation("androidx.media3:media3-exoplayer:1.4.1")

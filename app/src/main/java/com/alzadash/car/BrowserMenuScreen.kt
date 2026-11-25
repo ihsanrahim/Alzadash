@@ -34,6 +34,16 @@ class BrowserMenuScreen(
             VoiceCommands.dictate(carContext, { words -> surface.openUrl(Browser.toUrl(words)) }, { say(it) })
         })
         list.addItem(row("Forward") { b?.goForward() })
+        list.addItem(row("Sites page") { surface.openUrl(Browser.HOME) })
+        val onHome = b?.page?.second
+        list.addItem(Row.Builder().setTitle("Home page").addText(Browser.homePage(carContext) + if (onHome != null) " · tap to use this page" else "")
+            .setOnClickListener {
+                if (onHome != null) {
+                    Browser.setHomePage(carContext, onHome)
+                    say("Home page set")
+                }
+                invalidate()
+            }.build())
         list.addItem(Row.Builder().setTitle("Page theme").addText(Browser.theme(carContext)).setOnClickListener {
             Browser.setTheme(carContext, next(Browser.THEMES, Browser.theme(carContext)))
             b?.applySettings()

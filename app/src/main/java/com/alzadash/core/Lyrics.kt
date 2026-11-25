@@ -12,7 +12,8 @@ import java.util.concurrent.Executors
 data class LyricLine(val atMs: Long, val text: String)
 
 /**
- * Song lyrics from LRCLIB (lrclib.net), a free open lyrics database. Synced lyrics are
+ * Song lyrics from LRCLIB (lrclib.net), a free open lyrics database, with SyncLRC as a second
+ * source when LRCLIB has nothing (as in Auto Lyrics, see [AutoLyrics]). Synced lyrics are
  * preferred so the line being sung can be shown; plain lyrics are used otherwise.
  */
 object Lyrics {
@@ -89,13 +90,22 @@ object Lyrics {
                 return plain.lines().map { LyricLine(-1, it.trim()) }
             }
         }
-        for ((title, artist) in guesses(t)) {
-            val hit = search(title, artist) ?: continue
+        val guesses = guesses(t)
+        for ((title, artist) in guesses) {
+            val hit = search(title, artist, t.durationMs) ?: continue
             if (hit.optBoolean("instrumental")) return INSTRUMENTAL
             hit.optString("syncedLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { return parseLrc(it) }
             hit.optString("plainLyrics").takeIf { it.isNotBlank() && it != "null" }?.let { plain ->
                 return plain.lines().map { LyricLine(-1, it.trim()) }
             }
+        }
+        // Auto Lyrics' second source, for songs LRCLIB doesn't have.
+        val (title, artist) = guesses.first()
+        AutoLyrics.syncLrc(title, artist)?.let { txt ->
+            val timed = parseLrc(txt)
+            if (timed.isNotEmpty()) return timed
+            val plain = txt.lines().map { LyricLine(-1, it.trim()) }
+            if (plain.any { it.text.isNotEmpty() }) return plain
         }
         return emptyList()
     }
@@ -105,8 +115,8 @@ object Lyrics {
      * with the channel as the artist, so the title is cleaned and split as well.
      */
     private fun guesses(t: Track): List<Pair<String, String>> {
-        val title = clean(t.title)
-        val artist = t.artist.removeSuffix(" - Topic").replace(Regex("(?i)vevo$"), "").trim()
+        val title = clean(AutoLyrics.cleanTitle(t.title))
+        val artist = AutoLyrics.cleanArtist(t.artist).removeSuffix(" - Topic").replace(Regex("(?i)vevo$"), "").trim()
         val out = mutableListOf(title to artist)
         val dash = Regex("\\s[-–—|]\\s").find(title)
         if (dash != null) {
@@ -127,12 +137,13 @@ object Lyrics {
 
     private fun exact(t: Track): JSONObject? {
         if (t.title.isBlank() || t.artist.isBlank()) return null
-        var url = "https://lrclib.net/api/get?track_name=" + enc(t.title) + "&artist_name=" + enc(t.artist.removeSuffix(" - Topic"))
+        var url = "https://lrclib.net/api/get?track_name=" + enc(AutoLyrics.cleanTitle(t.title)) +
+            "&artist_name=" + enc(AutoLyrics.cleanArtist(t.artist).removeSuffix(" - Topic"))
         if (t.durationMs > 0) url += "&duration=" + (t.durationMs / 1000)
         return try { JSONObject(fetch(url)) } catch (_: Exception) { null }
     }
 
-    private fun search(title: String, artist: String): JSONObject? {
+    private fun search(title: String, artist: String, durationMs: Long): JSONObject? {
         if (title.isBlank()) return null
         var url = "https://lrclib.net/api/search?track_name=" + enc(title)
         if (artist.isNotBlank()) url += "&artist_name=" + enc(artist)
@@ -140,6 +151,7 @@ object Lyrics {
         var plain: JSONObject? = null
         for (i in 0 until arr.length()) {
             val o = arr.getJSONObject(i)
+            if (!AutoLyrics.lengthMatches(o, durationMs)) continue
             if (o.optString("syncedLyrics").let { it.isNotBlank() && it != "null" }) return o
             if (plain == null && (o.optBoolean("instrumental") || o.optString("plainLyrics").let { it.isNotBlank() && it != "null" })) plain = o
         }

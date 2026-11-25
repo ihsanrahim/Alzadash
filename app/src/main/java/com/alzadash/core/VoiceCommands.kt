@@ -129,7 +129,7 @@ object VoiceCommands {
                     target.browse(Browser.toUrl(s.substringAfter(' ').removePrefix("for ").trim()))
                     return
                 }
-                s.contains("browser") || s.contains("internet") -> { target.browse(Browser.HOME); return }
+                s.contains("browser") || s.contains("internet") -> { target.browse(Browser.homePage(context)); return }
                 s.contains("waze") -> { target.navigate("", Pkg.WAZE); return }
                 s.contains("maps") -> { target.navigate("", Pkg.MAPS); return }
                 s.contains("stop") && (s.contains("radio") || s.contains("music") || s == "stop") -> {

@@ -156,6 +156,19 @@ class MainActivity : AppCompatActivity() {
                 },
             ))
             it.addView(buttonRow(
+                smallButton("Home page") {
+                    val box = EditText(this).apply { setText(Browser.homePage(this@MainActivity)); isSingleLine = true }
+                    android.app.AlertDialog.Builder(this).setTitle("Browser home page").setView(box)
+                        .setPositiveButton("Save") { _, _ ->
+                            val t = box.text.toString().trim()
+                            Browser.setHomePage(this, if (t.isEmpty()) Browser.DEFAULT_HOME_PAGE else Browser.toUrl(t))
+                            toast("Home page: ${Browser.homePage(this)}")
+                        }
+                        .setNeutralButton("YouTube") { _, _ -> Browser.setHomePage(this, Browser.DEFAULT_HOME_PAGE) }
+                        .setNegativeButton("Cancel", null).show()
+                },
+            ))
+            it.addView(buttonRow(
                 smallButton("Bar buttons") { chooseBarButtons() },
                 smallButton("Bar position") {
                     val spots = listOf("Bottom centre", "Bottom left", "Bottom right", "Top centre", "Top left", "Top right")

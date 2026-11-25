@@ -30,7 +30,7 @@ class DashPresentation(context: Context, display: Display) : Presentation(contex
     private lateinit var block: TextView
     private var mode = Mode.DASH
     private var visible = Rect()
-    private var lastUrl = Browser.HOME
+    private var lastUrl = Browser.DEFAULT_HOME_PAGE
     var onRadioStep: (Int) -> Unit = {}
     var onStation: (com.alzadash.core.Station) -> Unit = {}
     var onSettings: () -> Unit = {}

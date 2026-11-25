@@ -11,10 +11,14 @@ data class Bookmark(val title: String, val url: String)
 
 /** Settings and bookmarks for the built-in browser on the car screen. */
 object Browser {
+    /** The Sites page of shortcuts. */
     const val HOME = "alzadash://home"
+    /** Where the browser opens, and where its Home button goes, unless changed in settings. */
+    const val DEFAULT_HOME_PAGE = "https://www.youtube.com"
 
     /** Built-in shortcuts on the Sites page. They can't be removed; bookmarks are added after them. */
     val SITES = listOf(
+        Bookmark("YouTube", "https://www.youtube.com"),
         Bookmark("Google", "https://www.google.com"),
         Bookmark("RTM Klik", "https://rtmklik.rtm.gov.my/"),
         Bookmark("Wikipedia", "https://www.wikipedia.org"),
@@ -27,7 +31,7 @@ object Browser {
 
     /** Buttons that can be shown on the browser's floating bar, in order. */
     val BAR_BUTTONS = listOf(
-        "back" to "Back", "forward" to "Forward", "home" to "Sites", "reload" to "Reload",
+        "back" to "Back", "forward" to "Forward", "home" to "Home", "sites" to "Sites", "reload" to "Reload",
         "star" to "Bookmark", "tabs" to "Tabs", "zoomout" to "Zoom out", "zoomin" to "Zoom in",
         "keyboard" to "Keyboard", "fullscreen" to "Full screen", "move" to "Move bar", "close" to "Close",
     )
@@ -57,7 +61,6 @@ object Browser {
         val raw = sp(context).getString("bookmarks", null) ?: return emptyList()
         val arr = JSONArray(raw)
         return (0 until arr.length()).map { arr.getJSONObject(it).let { o -> Bookmark(o.getString("title"), o.getString("url")) } }
-            .filter { !it.url.contains("youtube.com") }
     }
 
     fun saveBookmarks(context: Context, list: List<Bookmark>) {
@@ -72,16 +75,25 @@ object Browser {
     fun removeBookmark(context: Context, url: String) =
         saveBookmarks(context, bookmarks(context).filter { it.url != url })
 
+    /** The home page: YouTube unless set otherwise. */
+    fun homePage(context: Context) = sp(context).getString("browser_home_page", null) ?: DEFAULT_HOME_PAGE
+    fun setHomePage(context: Context, url: String) = sp(context).edit().putString("browser_home_page", url).apply()
+
     fun adBlock(context: Context) = sp(context).getBoolean("browser_adblock", true)
     fun setAdBlock(context: Context, on: Boolean) = sp(context).edit().putBoolean("browser_adblock", on).apply()
     fun desktop(context: Context) = sp(context).getBoolean("browser_desktop", false)
     fun setDesktop(context: Context, on: Boolean) = sp(context).edit().putBoolean("browser_desktop", on).apply()
 
     // ---- AutoDeck-style bar and page settings ----
-    fun barButtons(context: Context): Set<String> = sp(context).getStringSet("browser_bar", null) ?: DEFAULT_BAR
+    fun barButtons(context: Context): Set<String> {
+        val saved = sp(context).getStringSet("browser_bar", null) ?: return DEFAULT_BAR
+        // "Sites" is new in 4.14: show it on bars saved before then, unless it was turned off.
+        return if ("sites" !in saved && "-sites" !in saved) saved + "sites" else saved - "-sites"
+    }
     fun setBarButton(context: Context, key: String, on: Boolean) {
         val now = barButtons(context).toMutableSet()
         if (on) now += key else now -= key
+        if (key == "sites" && !on) now += "-sites"
         if (key == "close" && !on) now += "close" // the bar always keeps a way out
         sp(context).edit().putStringSet("browser_bar", now).apply()
     }
